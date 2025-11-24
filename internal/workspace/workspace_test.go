@@ -368,7 +368,7 @@ func TestCleanPath(t *testing.T) {
 		},
 		{
 			name:     "path with dot segments",
-			path:     "/home/user/./. sesh/../.sesh",
+			path:     "/home/user/./.sesh/../.sesh",
 			expected: "/home/user/.sesh",
 		},
 	}
