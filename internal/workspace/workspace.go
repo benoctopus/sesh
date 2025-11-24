@@ -33,7 +33,7 @@ func GetWorktreePath(projectPath, branch string) string {
 
 // EnsureProjectDir creates the project directory if it doesn't exist
 func EnsureProjectDir(projectPath string) error {
-	if err := os.MkdirAll(projectPath, 0755); err != nil {
+	if err := os.MkdirAll(projectPath, 0o755); err != nil {
 		return eris.Wrapf(err, "failed to create project directory: %s", projectPath)
 	}
 	return nil
@@ -193,7 +193,6 @@ func ListProjects(workspaceDir string) ([]string, error) {
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, eris.Wrap(err, "failed to list projects in workspace")
 	}

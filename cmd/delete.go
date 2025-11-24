@@ -103,7 +103,11 @@ func deleteProject(database *sql.DB, cfg *config.Config, proj *models.Project) e
 
 	if !deleteForce {
 		// Ask for confirmation
-		fmt.Printf("This will delete project '%s' with %d worktree(s) and all associated sessions.\n", proj.Name, len(worktrees))
+		fmt.Printf(
+			"This will delete project '%s' with %d worktree(s) and all associated sessions.\n",
+			proj.Name,
+			len(worktrees),
+		)
 		fmt.Printf("Project path: %s\n", proj.LocalPath)
 		fmt.Print("Are you sure? (yes/no): ")
 

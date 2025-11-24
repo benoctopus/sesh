@@ -143,7 +143,13 @@ func TestTruncate(t *testing.T) {
 			}
 			// Verify result length doesn't exceed maxLen
 			if len(result) > tt.maxLen {
-				t.Errorf("truncate(%q, %d) result length %d exceeds maxLen %d", tt.input, tt.maxLen, len(result), tt.maxLen)
+				t.Errorf(
+					"truncate(%q, %d) result length %d exceeds maxLen %d",
+					tt.input,
+					tt.maxLen,
+					len(result),
+					tt.maxLen,
+				)
 			}
 		})
 	}
