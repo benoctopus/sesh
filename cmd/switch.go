@@ -228,12 +228,6 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to create worktree in database")
 	}
 
-	// Initialize session manager
-	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
-	if err != nil {
-		return eris.Wrap(err, "failed to initialize session manager")
-	}
-
 	// Create session
 	sessionName := workspace.GenerateSessionName(proj.Name, branch)
 	fmt.Printf("Creating %s session %s...\n", sessionMgr.Name(), sessionName)
