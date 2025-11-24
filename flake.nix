@@ -20,15 +20,15 @@
           pkgs.git
           pkgs.go_1_25
           pkgs.go-task
-          pkgs.claude-code
           pkgs.gopls
-          pkgs.go-lines
+          pkgs.golines
           pkgs.golangci-lint
           pkgs.jq
           pkgs.yq
           pkgs.gofumpt
           pkgs.uutils-coreutils-noprefix
           pkgs.shellcheck
+          pkgs.cobra-cli
         ]; };
       }
     );
