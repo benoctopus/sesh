@@ -63,7 +63,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	// Get current session
 	currentSessionName, err := sessionMgr.GetCurrentSessionName()
-	if err != nil && !eris.Is(err, session.ErrNotInSession) {
+	if err != nil {
 		return eris.Wrap(err, "failed to get current session name")
 	}
 

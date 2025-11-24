@@ -105,6 +105,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		branch = selectedBranch
 	}
 
+	// Initialize session manager
+	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
+	if err != nil {
+		return eris.Wrap(err, "failed to initialize session manager")
+	}
+
 	// Check if worktree already exists
 	existingWorktree, err := db.GetWorktree(database, proj.ID, branch)
 	if err != nil && err != sql.ErrNoRows {
@@ -119,12 +125,6 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		sess, err := db.GetSessionByWorktree(database, existingWorktree.ID)
 		if err != nil && err != sql.ErrNoRows {
 			return eris.Wrap(err, "failed to get session")
-		}
-
-		// Initialize session manager
-		sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
-		if err != nil {
-			return eris.Wrap(err, "failed to initialize session manager")
 		}
 
 		if sess != nil {

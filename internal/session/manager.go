@@ -35,6 +35,9 @@ type SessionManager interface {
 
 	// IsInsideSession checks if currently inside a session
 	IsInsideSession() bool
+
+	// GetCurrentSessionName returns the name of the current session, or empty string if not in a session
+	GetCurrentSessionName() (string, error)
 }
 
 // BackendType represents the type of session backend
@@ -163,6 +166,10 @@ func (n *NoneManager) Name() string {
 
 func (n *NoneManager) IsInsideSession() bool {
 	return false
+}
+
+func (n *NoneManager) GetCurrentSessionName() (string, error) {
+	return "", nil
 }
 
 // IsInsideTmux checks if the current process is running inside tmux

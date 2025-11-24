@@ -190,11 +190,11 @@ func parseTmuxList(output string) []string {
 	return sessions
 }
 
-// GetCurrentSession returns the name of the current tmux session
+// GetCurrentSessionName returns the name of the current tmux session
 // Returns empty string if not inside a session
-func (t *TmuxManager) GetCurrentSession() (string, error) {
+func (t *TmuxManager) GetCurrentSessionName() (string, error) {
 	if !t.IsInsideSession() {
-		return "", eris.New("not inside a tmux session")
+		return "", nil
 	}
 
 	cmd := exec.Command("tmux", "display-message", "-p", "#{session_name}")
