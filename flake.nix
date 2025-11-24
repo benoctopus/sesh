@@ -30,6 +30,7 @@
           pkgs.shellcheck
           pkgs.cobra-cli
           pkgs.tree
+          pkgs.fzf
         ]; };
       }
     );
