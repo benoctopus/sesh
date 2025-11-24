@@ -1,0 +1,152 @@
+version: '3'
+
+vars:
+  BINARY_NAME: sesh
+  DIST_DIR: dist
+  MAIN_PACKAGE: .
+  GO_FILES:
+    sh: find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./.direnv/*"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build the binary
+    sources:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+    generates:
+      - '{{.DIST_DIR}}/{{.BINARY_NAME}}'
+    cmds:
+      - mkdir -p {{.DIST_DIR}}
+      - go build -o {{.DIST_DIR}}/{{.BINARY_NAME}} {{.MAIN_PACKAGE}}
+    method: checksum
+
+  build:debug:
+    desc: Build the binary with debug symbols
+    cmds:
+      - mkdir -p {{.DIST_DIR}}
+      - go build -gcflags="all=-N -l" -o {{.DIST_DIR}}/{{.BINARY_NAME}} {{.MAIN_PACKAGE}}
+
+  install:
+    desc: Install the binary to $GOPATH/bin
+    deps: [build]
+    cmds:
+      - go install {{.MAIN_PACKAGE}}
+
+  run:
+    desc: "Run the application (usage: task run -- [args])"
+    deps: [build]
+    cmds:
+      - '{{.DIST_DIR}}/{{.BINARY_NAME}} {{.CLI_ARGS}}'
+
+  dev:
+    desc: Run in development mode (rebuild on changes)
+    cmds:
+      - |
+        while true; do
+          task build
+          echo "Watching for changes... (Ctrl+C to stop)"
+          inotifywait -qre close_write . --include '\.go$' || fswatch -1 -r --include='\.go$' . || sleep 2
+        done
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v -race -coverprofile=coverage.out ./...
+
+  test:coverage:
+    desc: Run tests and show coverage
+    cmds:
+      - task: test
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Coverage report generated at coverage.html"
+
+  test:short:
+    desc: Run tests (short mode)
+    cmds:
+      - go test -short ./...
+
+  bench:
+    desc: Run benchmarks
+    cmds:
+      - go test -bench=. -benchmem ./...
+
+  lint:
+    desc: Run linter
+    cmds:
+      - golangci-lint run ./...
+
+  lint:fix:
+    desc: Run linter and auto-fix issues
+    cmds:
+      - golangci-lint run --fix ./...
+
+  fmt:
+    desc: Format code
+    cmds:
+      - gofumpt -l -w .
+      - golines -w --max-len=120 --base-formatter=gofumpt .
+
+  fmt:check:
+    desc: Check if code is formatted
+    cmds:
+      - gofumpt -l .
+      - test -z "$(gofumpt -l .)"
+
+  tidy:
+    desc: Tidy go.mod
+    cmds:
+      - go mod tidy
+
+  verify:
+    desc: Verify dependencies
+    cmds:
+      - go mod verify
+
+  check:
+    desc: Run all checks (fmt, lint, test)
+    cmds:
+      - task: fmt:check
+      - task: lint
+      - task: test
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.DIST_DIR}}
+      - rm -f coverage.out coverage.html
+      - go clean -cache -testcache
+
+  clean:all:
+    desc: Clean all generated files including dependencies
+    cmds:
+      - task: clean
+      - rm -rf vendor/
+      - go clean -modcache
+
+  deps:
+    desc: Download dependencies
+    cmds:
+      - go mod download
+
+  cobra:add:
+    desc: "Add a new cobra command (usage: task cobra:add -- commandName)"
+    cmds:
+      - cobra-cli add {{.CLI_ARGS}}
+
+  init:db:
+    desc: Initialize the database (placeholder for future implementation)
+    cmds:
+      - echo "Database initialization not yet implemented"
+
+  help:
+    desc: Show help for the built binary
+    deps: [build]
+    cmds:
+      - '{{.DIST_DIR}}/{{.BINARY_NAME}} --help'
