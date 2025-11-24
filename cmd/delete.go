@@ -139,7 +139,7 @@ func deleteProject(database *sql.DB, cfg *config.Config, proj *models.Project) e
 		}
 
 		if sess != nil {
-			// Kill tmux session if it exists
+			// Kill session if it exists
 			exists, err := sessionMgr.Exists(sess.TmuxSessionName)
 			if err != nil {
 				fmt.Printf("Warning: failed to check session existence: %v\n", err)
@@ -221,7 +221,7 @@ func deleteBranch(database *sql.DB, cfg *config.Config, proj *models.Project, br
 	}
 
 	if sess != nil {
-		// Kill tmux session if it exists
+		// Kill session if it exists
 		exists, err := sessionMgr.Exists(sess.TmuxSessionName)
 		if err != nil {
 			fmt.Printf("Warning: failed to check session existence: %v\n", err)

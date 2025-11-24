@@ -19,7 +19,7 @@ var cloneCmd = &cobra.Command{
 	Use:   "clone <remote-url>",
 	Short: "Clone a git repository into the workspace folder",
 	Long: `Clone a git repository into the workspace folder as a bare repo,
-create the main worktree, and set up a tmux session.
+create the main worktree, and set up a session.
 
 Examples:
   sesh clone git@github.com:user/repo.git
@@ -126,7 +126,7 @@ func runClone(cmd *cobra.Command, args []string) error {
 	// Generate session name
 	sessionName := workspace.GenerateSessionName(projectName, defaultBranch)
 
-	// Create tmux session
+	// Create session
 	fmt.Printf("Creating %s session %s...\n", sessionMgr.Name(), sessionName)
 	if err := sessionMgr.Create(sessionName, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to create session")
