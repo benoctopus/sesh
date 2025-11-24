@@ -41,6 +41,11 @@ func runClone(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to load configuration")
 	}
 
+	// Ensure config directory exists (needed for database)
+	if err := config.EnsureConfigDir(); err != nil {
+		return eris.Wrap(err, "failed to ensure config directory")
+	}
+
 	// Ensure workspace directory exists
 	if err := config.EnsureWorkspaceDir(); err != nil {
 		return eris.Wrap(err, "failed to ensure workspace directory")

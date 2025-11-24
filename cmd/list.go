@@ -42,6 +42,11 @@ func init() {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
+	// Ensure config directory exists (needed for database)
+	if err := config.EnsureConfigDir(); err != nil {
+		return eris.Wrap(err, "failed to ensure config directory")
+	}
+
 	// Initialize database
 	dbPath, err := config.GetDBPath()
 	if err != nil {
