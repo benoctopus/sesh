@@ -87,19 +87,21 @@ func RunFuzzyFinder(items []string, finder string) (string, error) {
 		return "", eris.Wrap(err, "failed to create stdin pipe")
 	}
 
-	// Set output to capture selection
-	cmd.Stdout = nil // Will capture below
-	cmd.Stderr = os.Stderr
+	// Capture stdout for the selection
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", eris.Wrap(err, "failed to create stdout pipe")
+	}
 
-	// Connect to terminal for interactive input
-	cmd.Stdin = os.Stdin
+	// Set stderr to show errors
+	cmd.Stderr = os.Stderr
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
 		return "", eris.Wrap(err, "failed to start fuzzy finder")
 	}
 
-	// Write items to stdin
+	// Write items to stdin in a goroutine
 	go func() {
 		defer stdin.Close()
 		for _, item := range items {
@@ -107,9 +109,15 @@ func RunFuzzyFinder(items []string, finder string) (string, error) {
 		}
 	}()
 
-	// Capture output
-	output, err := cmd.Output()
-	if err != nil {
+	// Read the output
+	scanner := bufio.NewScanner(stdout)
+	var selected string
+	if scanner.Scan() {
+		selected = strings.TrimSpace(scanner.Text())
+	}
+
+	// Wait for the command to finish
+	if err := cmd.Wait(); err != nil {
 		// User might have cancelled (Ctrl+C)
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 130 {
 			return "", eris.New("selection cancelled")
@@ -117,7 +125,6 @@ func RunFuzzyFinder(items []string, finder string) (string, error) {
 		return "", eris.Wrap(err, "fuzzy finder failed")
 	}
 
-	selected := strings.TrimSpace(string(output))
 	if selected == "" {
 		return "", eris.New("no selection made")
 	}
@@ -199,17 +206,21 @@ func SelectWithPreview(items []string, previewCmd string) (string, error) {
 		return "", eris.Wrap(err, "failed to create stdin pipe")
 	}
 
-	// Connect to terminal
-	cmd.Stdout = nil // Will capture below
+	// Capture stdout for the selection
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", eris.Wrap(err, "failed to create stdout pipe")
+	}
+
+	// Set stderr to show errors
 	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
 		return "", eris.Wrap(err, "failed to start fuzzy finder")
 	}
 
-	// Write items to stdin
+	// Write items to stdin in a goroutine
 	go func() {
 		defer stdin.Close()
 		for _, item := range items {
@@ -217,16 +228,21 @@ func SelectWithPreview(items []string, previewCmd string) (string, error) {
 		}
 	}()
 
-	// Capture output
-	output, err := cmd.Output()
-	if err != nil {
+	// Read the output
+	scanner := bufio.NewScanner(stdout)
+	var selected string
+	if scanner.Scan() {
+		selected = strings.TrimSpace(scanner.Text())
+	}
+
+	// Wait for the command to finish
+	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 130 {
 			return "", eris.New("selection cancelled")
 		}
 		return "", eris.Wrap(err, "fuzzy finder failed")
 	}
 
-	selected := strings.TrimSpace(string(output))
 	if selected == "" {
 		return "", eris.New("no selection made")
 	}
