@@ -28,30 +28,40 @@ func ListLocalBranches(repoPath string) ([]string, error) {
 
 // ListRemoteBranches lists all remote branches in a repository
 // Returns branch names without the "origin/" prefix (e.g., "main" instead of "origin/main")
+// For bare repositories, lists branches from refs/heads/
 func ListRemoteBranches(repoPath string) ([]string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "branch", "-r", "--format=%(refname:short)")
+	// Try listing branches using for-each-ref which works for both bare and normal repos
+	cmd := exec.Command("git", "-C", repoPath, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, eris.Wrap(err, "failed to list remote branches")
+		// Fallback to branch -r for normal repos
+		cmd = exec.Command("git", "-C", repoPath, "branch", "-r", "--format=%(refname:short)")
+		output, err = cmd.Output()
+		if err != nil {
+			return nil, eris.Wrap(err, "failed to list remote branches")
+		}
+
+		branches := parseGitBranchList(string(output))
+
+		// Remove "origin/" prefix and filter out HEAD
+		var result []string
+		for _, branch := range branches {
+			if strings.Contains(branch, "HEAD") {
+				continue
+			}
+			// Remove "origin/" prefix
+			if strings.HasPrefix(branch, "origin/") {
+				result = append(result, strings.TrimPrefix(branch, "origin/"))
+			} else {
+				result = append(result, branch)
+			}
+		}
+
+		return result, nil
 	}
 
-	branches := parseGitBranchList(string(output))
-
-	// Remove "origin/" prefix and filter out HEAD
-	var result []string
-	for _, branch := range branches {
-		if strings.Contains(branch, "HEAD") {
-			continue
-		}
-		// Remove "origin/" prefix
-		if strings.HasPrefix(branch, "origin/") {
-			result = append(result, strings.TrimPrefix(branch, "origin/"))
-		} else {
-			result = append(result, branch)
-		}
-	}
-
-	return result, nil
+	// For bare repos, branches are directly under refs/heads/
+	return parseGitBranchList(string(output)), nil
 }
 
 // ListAllBranches lists both local and remote branches
@@ -150,16 +160,28 @@ func DoesLocalBranchExist(repoPath, branch string) (bool, error) {
 }
 
 // DoesRemoteBranchExist checks if a remote branch exists
+// For bare repositories, branches are at refs/heads/ not refs/remotes/origin/
 func DoesRemoteBranchExist(repoPath, branch string) (bool, error) {
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/remotes/origin/"+branch)
+	// First try refs/heads/ (for bare repos)
+	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branch)
 	err := cmd.Run()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
-			return false, nil
-		}
-		return false, eris.Wrap(err, "failed to check remote branch existence")
+	if err == nil {
+		return true, nil
 	}
-	return true, nil
+
+	// Then try refs/remotes/origin/ (for normal repos)
+	cmd = exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/remotes/origin/"+branch)
+	err = cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+
+	// Check if it's just a ref that doesn't exist or an actual error
+	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
+		return false, nil
+	}
+
+	return false, nil
 }
 
 // parseGitBranchList parses the output of git branch commands
