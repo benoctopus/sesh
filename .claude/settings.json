@@ -6,7 +6,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/on-project-open.sh"
+            "command": "go mod download"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "go tool task fmt"
+          },
+          {
+            "type": "command",
+            "command": "go tool task test:short"
           }
         ]
       }

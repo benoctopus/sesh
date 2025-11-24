@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 vars:
   BINARY_NAME: sesh
@@ -17,11 +17,11 @@ tasks:
   build:
     desc: Build the binary
     sources:
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
     generates:
-      - '{{.DIST_DIR}}/{{.BINARY_NAME}}'
+      - "{{.DIST_DIR}}/{{.BINARY_NAME}}"
     cmds:
       - mkdir -p {{.DIST_DIR}}
       - go build -o {{.DIST_DIR}}/{{.BINARY_NAME}} {{.MAIN_PACKAGE}}
@@ -43,7 +43,7 @@ tasks:
     desc: "Run the application (usage: task run -- [args])"
     deps: [build]
     cmds:
-      - '{{.DIST_DIR}}/{{.BINARY_NAME}} {{.CLI_ARGS}}'
+      - "{{.DIST_DIR}}/{{.BINARY_NAME}} {{.CLI_ARGS}}"
 
   dev:
     desc: Run in development mode (rebuild on changes)
@@ -80,18 +80,18 @@ tasks:
   lint:
     desc: Run linter
     cmds:
-      - golangci-lint run ./...
+      - go tool golangci-lint run ./...
 
   lint:fix:
     desc: Run linter and auto-fix issues
     cmds:
-      - golangci-lint run --fix ./...
+      - go tool golangci-lint run --fix ./...
 
   fmt:
     desc: Format code
     cmds:
-      - gofumpt -l -w .
-      - golines -w --max-len=120 --base-formatter=gofumpt .
+      - go tool gofumpt -l -w .
+      - go tool golines -w --max-len=120 --base-formatter=gofumpt .
 
   fmt:check:
     desc: Check if code is formatted
@@ -149,4 +149,4 @@ tasks:
     desc: Show help for the built binary
     deps: [build]
     cmds:
-      - '{{.DIST_DIR}}/{{.BINARY_NAME}} --help'
+      - "{{.DIST_DIR}}/{{.BINARY_NAME}} --help"
