@@ -16,7 +16,6 @@
       in
       {
         devShells.default = pkgs.mkShell { packages = [ 
-          pkgs.bashInteractive 
           pkgs.git
           pkgs.go_1_24
           pkgs.go-task
