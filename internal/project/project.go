@@ -14,18 +14,26 @@ import (
 
 // ResolveProject resolves a project from a project name or current working directory
 // If projectName is empty, it will attempt to detect the project from CWD
+// Supports both full project names (github.com/user/repo) and short names (repo)
 // Priority:
-// 1. If projectName is provided, look it up in the database
+// 1. If projectName is provided, try exact match first, then short name match
 // 2. If projectName is empty, detect project from CWD
 // 3. Return error if not found
 func ResolveProject(database *sql.DB, projectName string, cwd string) (*models.Project, error) {
 	// If project name is explicitly provided, look it up
 	if projectName != "" {
+		// First try exact match with full name
 		project, err := db.GetProject(database, projectName)
-		if err != nil {
-			return nil, eris.Wrapf(err, "project '%s' not found", projectName)
+		if err == nil {
+			return project, nil
 		}
-		return project, nil
+
+		// If not found by exact match, try to find by short name (repo name only)
+		if eris.Is(err, sql.ErrNoRows) {
+			return resolveByShortName(database, projectName)
+		}
+
+		return nil, err
 	}
 
 	// Try to detect project from CWD
@@ -41,6 +49,45 @@ func ResolveProject(database *sql.DB, projectName string, cwd string) (*models.P
 	}
 
 	return project, nil
+}
+
+// resolveByShortName finds a project by its short name (last component of path)
+// e.g., "sesh" matches "github.com/benoctopus/sesh"
+// If multiple projects match, returns an error with the list
+func resolveByShortName(database *sql.DB, shortName string) (*models.Project, error) {
+	// Get all projects
+	allProjects, err := db.GetAllProjects(database)
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to get all projects")
+	}
+
+	// Find projects that match the short name
+	var matches []*models.Project
+	for _, proj := range allProjects {
+		repoName := filepath.Base(proj.Name)
+		if repoName == shortName {
+			matches = append(matches, proj)
+		}
+	}
+
+	if len(matches) == 0 {
+		return nil, eris.Errorf("no project found matching '%s'", shortName)
+	}
+
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+
+	// Multiple matches - return error with list
+	var matchNames []string
+	for _, match := range matches {
+		matchNames = append(matchNames, match.Name)
+	}
+	return nil, eris.Errorf(
+		"multiple projects found with name '%s': %s\nPlease specify the full project name",
+		shortName,
+		strings.Join(matchNames, ", "),
+	)
 }
 
 // DetectProjectFromCWD detects the project name from the current working directory
