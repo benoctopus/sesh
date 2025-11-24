@@ -110,7 +110,7 @@ func EnsureConfigDir() error {
 		return eris.Wrap(err, "failed to get config directory")
 	}
 
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		return eris.Wrapf(err, "failed to create config directory: %s", configDir)
 	}
 
@@ -124,7 +124,7 @@ func EnsureWorkspaceDir() error {
 		return eris.Wrap(err, "failed to get workspace directory")
 	}
 
-	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		return eris.Wrapf(err, "failed to create workspace directory: %s", workspaceDir)
 	}
 

@@ -140,7 +140,14 @@ func GetAllProjects(db *sql.DB) ([]*models.Project, error) {
 		project := &models.Project{}
 		var lastFetched sql.NullTime
 
-		err := rows.Scan(&project.ID, &project.Name, &project.RemoteURL, &project.LocalPath, &project.CreatedAt, &lastFetched)
+		err := rows.Scan(
+			&project.ID,
+			&project.Name,
+			&project.RemoteURL,
+			&project.LocalPath,
+			&project.CreatedAt,
+			&lastFetched,
+		)
 		if err != nil {
 			return nil, eris.Wrap(err, "failed to scan project row")
 		}
@@ -220,7 +227,8 @@ func GetWorktree(db *sql.DB, projectID int, branch string) (*models.Worktree, er
 	worktree := &models.Worktree{}
 	err := db.QueryRow(
 		"SELECT id, project_id, branch, path, is_main, created_at, last_used FROM worktrees WHERE project_id = ? AND branch = ?",
-		projectID, branch,
+		projectID,
+		branch,
 	).Scan(&worktree.ID, &worktree.ProjectID, &worktree.Branch, &worktree.Path, &worktree.IsMain, &worktree.CreatedAt, &worktree.LastUsed)
 
 	if err == sql.ErrNoRows {
@@ -283,7 +291,15 @@ func GetWorktreesByProject(db *sql.DB, projectID int) ([]*models.Worktree, error
 	var worktrees []*models.Worktree
 	for rows.Next() {
 		worktree := &models.Worktree{}
-		err := rows.Scan(&worktree.ID, &worktree.ProjectID, &worktree.Branch, &worktree.Path, &worktree.IsMain, &worktree.CreatedAt, &worktree.LastUsed)
+		err := rows.Scan(
+			&worktree.ID,
+			&worktree.ProjectID,
+			&worktree.Branch,
+			&worktree.Path,
+			&worktree.IsMain,
+			&worktree.CreatedAt,
+			&worktree.LastUsed,
+		)
 		if err != nil {
 			return nil, eris.Wrap(err, "failed to scan worktree row")
 		}
@@ -402,7 +418,13 @@ func GetAllSessions(db *sql.DB) ([]*models.Session, error) {
 	var sessions []*models.Session
 	for rows.Next() {
 		session := &models.Session{}
-		err := rows.Scan(&session.ID, &session.WorktreeID, &session.TmuxSessionName, &session.CreatedAt, &session.LastAttached)
+		err := rows.Scan(
+			&session.ID,
+			&session.WorktreeID,
+			&session.TmuxSessionName,
+			&session.CreatedAt,
+			&session.LastAttached,
+		)
 		if err != nil {
 			return nil, eris.Wrap(err, "failed to scan session row")
 		}
@@ -443,9 +465,24 @@ func GetAllSessionDetails(db *sql.DB) ([]*models.SessionDetails, error) {
 		var lastFetched sql.NullTime
 
 		err := rows.Scan(
-			&session.ID, &session.WorktreeID, &session.TmuxSessionName, &session.CreatedAt, &session.LastAttached,
-			&worktree.ID, &worktree.ProjectID, &worktree.Branch, &worktree.Path, &worktree.IsMain, &worktree.CreatedAt, &worktree.LastUsed,
-			&project.ID, &project.Name, &project.RemoteURL, &project.LocalPath, &project.CreatedAt, &lastFetched,
+			&session.ID,
+			&session.WorktreeID,
+			&session.TmuxSessionName,
+			&session.CreatedAt,
+			&session.LastAttached,
+			&worktree.ID,
+			&worktree.ProjectID,
+			&worktree.Branch,
+			&worktree.Path,
+			&worktree.IsMain,
+			&worktree.CreatedAt,
+			&worktree.LastUsed,
+			&project.ID,
+			&project.Name,
+			&project.RemoteURL,
+			&project.LocalPath,
+			&project.CreatedAt,
+			&lastFetched,
 		)
 		if err != nil {
 			return nil, eris.Wrap(err, "failed to scan session details row")
