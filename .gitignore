@@ -1,0 +1,15 @@
+dist/
+.direnv/
+.DS_Store
+*.log
+node_modules/
+.env
+*.env
+!.env.local
+!.env.example
+!.env.*.local
+!.env.*.example
+!*.env.local
+!*.env.example
+
+
