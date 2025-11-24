@@ -62,14 +62,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get current session
-	var currentSessionName string
-	if os.Getenv("TMUX") != "" {
-		// We're inside a tmux session, get the session name
-		cmd := exec.Command("tmux", "display-message", "-p", "#S")
-		output, err := cmd.Output()
-		if err == nil {
-			currentSessionName = strings.TrimSpace(string(output))
-		}
+	currentSessionName, err := sessionMgr.GetCurrentSessionName()
+	if err != nil && !eris.Is(err, session.ErrNotInSession) {
+		return eris.Wrap(err, "failed to get current session name")
 	}
 
 	// Get current working directory
