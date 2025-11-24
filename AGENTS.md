@@ -8,7 +8,7 @@ This document provides guidance for AI coding assistants working with the `sesh`
 
 ## Core Technologies
 
-- **Language**: Go 1.25.2
+- **Language**: Go 1.24
 - **CLI Framework**: [Cobra](https://github.com/spf13/cobra) - for command-line interface. cobra-cli should be used for scaffolding new commands.
 - **Error Handling**: [eris](https://github.com/rotisserie/eris) - for rich error handling with stack traces
 - **Database**: SQLite - for persistent application state
