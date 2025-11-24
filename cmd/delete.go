@@ -138,7 +138,7 @@ func deleteProject(database *sql.DB, cfg *config.Config, proj *models.Project) e
 	// Delete all sessions
 	for _, wt := range worktrees {
 		sess, err := db.GetSessionByWorktree(database, wt.ID)
-		if err != nil && err != sql.ErrNoRows {
+		if err != nil && !eris.Is(err, sql.ErrNoRows) {
 			fmt.Printf("Warning: failed to get session for worktree %d: %v\n", wt.ID, err)
 			continue
 		}
@@ -221,7 +221,7 @@ func deleteBranch(database *sql.DB, cfg *config.Config, proj *models.Project, br
 
 	// Get and delete session
 	sess, err := db.GetSessionByWorktree(database, worktree.ID)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !eris.Is(err, sql.ErrNoRows) {
 		return eris.Wrap(err, "failed to get session")
 	}
 

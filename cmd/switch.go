@@ -118,7 +118,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 
 	// Check if worktree already exists
 	existingWorktree, err := db.GetWorktree(database, proj.ID, branch)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !eris.Is(err, sql.ErrNoRows) {
 		return eris.Wrap(err, "failed to check for existing worktree")
 	}
 
@@ -128,7 +128,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 
 		// Get or create session
 		sess, err := db.GetSessionByWorktree(database, existingWorktree.ID)
-		if err != nil && err != sql.ErrNoRows {
+		if err != nil && !eris.Is(err, sql.ErrNoRows) {
 			return eris.Wrap(err, "failed to get session")
 		}
 

@@ -71,7 +71,7 @@ func runClone(cmd *cobra.Command, args []string) error {
 
 	// Check if project already exists
 	existingProject, err := db.GetProject(database, projectName)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !eris.Is(err, sql.ErrNoRows) {
 		return eris.Wrap(err, "failed to check for existing project")
 	}
 	if existingProject != nil {
