@@ -1,14 +1,15 @@
 package cmd
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/benoctopus/sesh/internal/config"
-	"github.com/benoctopus/sesh/internal/db"
+	"github.com/benoctopus/sesh/internal/session"
+	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 )
@@ -42,35 +43,25 @@ func init() {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	// Ensure config directory exists (needed for database)
-	if err := config.EnsureConfigDir(); err != nil {
-		return eris.Wrap(err, "failed to ensure config directory")
-	}
-
-	// Initialize database
-	dbPath, err := config.GetDBPath()
+	// Load configuration
+	cfg, err := config.LoadConfig()
 	if err != nil {
-		return eris.Wrap(err, "failed to get database path")
+		return eris.Wrap(err, "failed to load configuration")
 	}
-
-	database, err := db.InitDB(dbPath)
-	if err != nil {
-		return eris.Wrap(err, "failed to initialize database")
-	}
-	defer database.Close()
 
 	if listProjects {
-		return listAllProjects(database)
+		return listAllProjects(cfg)
 	}
 
 	// Default: list sessions
-	return listAllSessions(database)
+	return listAllSessions(cfg)
 }
 
-func listAllProjects(database *sql.DB) error {
-	projects, err := db.GetAllProjects(database)
+func listAllProjects(cfg *config.Config) error {
+	// Discover all projects from filesystem
+	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
 	if err != nil {
-		return eris.Wrap(err, "failed to get projects")
+		return eris.Wrap(err, "failed to discover projects")
 	}
 
 	if len(projects) == 0 {
@@ -89,104 +80,92 @@ func listAllProjects(database *sql.DB) error {
 	}
 
 	// Print table header
-	fmt.Printf("%-50s %-12s %-20s\n", "PROJECT", "WORKTREES", "LAST FETCHED")
+	fmt.Printf("%-50s %-12s %-20s\n", "PROJECT", "WORKTREES", "CREATED")
 	fmt.Println(strings.Repeat("-", 85))
 
 	for _, proj := range projects {
 		// Get worktree count
-		worktrees, err := db.GetWorktreesByProject(database, proj.ID)
+		worktrees, err := state.DiscoverWorktrees(proj)
 		if err != nil {
-			return eris.Wrap(err, "failed to get worktrees for project")
+			// Skip projects with errors
+			continue
 		}
 
-		lastFetched := "never"
-		if proj.LastFetched != nil {
-			lastFetched = formatTimeAgo(*proj.LastFetched)
-		}
+		created := formatTimeAgo(proj.CreatedAt)
 
 		fmt.Printf("%-50s %-12d %-20s\n",
 			truncate(proj.Name, 50),
 			len(worktrees),
-			lastFetched,
+			created,
 		)
 	}
 
 	return nil
 }
 
-func listAllSessions(database *sql.DB) error {
-	// Get all sessions with their worktree and project info
-	query := `
-		SELECT
-			s.id, s.worktree_id, s.tmux_session_name, s.created_at, s.last_attached,
-			w.id, w.project_id, w.branch, w.path, w.is_main, w.created_at, w.last_used,
-			p.id, p.name, p.remote_url, p.local_path, p.created_at, p.last_fetched
-		FROM sessions s
-		JOIN worktrees w ON s.worktree_id = w.id
-		JOIN projects p ON w.project_id = p.id
-		ORDER BY s.last_attached DESC
-	`
-
-	rows, err := database.Query(query)
+func listAllSessions(cfg *config.Config) error {
+	// Initialize session manager
+	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
 	if err != nil {
-		return eris.Wrap(err, "failed to query sessions")
+		return eris.Wrap(err, "failed to initialize session manager")
 	}
-	defer rows.Close()
+
+	// Get all running sessions
+	runningSessions, err := state.DiscoverSessions(sessionMgr)
+	if err != nil {
+		return eris.Wrap(err, "failed to discover sessions")
+	}
+
+	// Discover all projects and worktrees
+	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
+	if err != nil {
+		return eris.Wrap(err, "failed to discover projects")
+	}
 
 	type SessionDetail struct {
-		SessionID    int
 		SessionName  string
 		ProjectName  string
 		Branch       string
 		WorktreePath string
-		LastAttached time.Time
 		LastUsed     time.Time
-		LastFetched  *time.Time
+		IsRunning    bool
 	}
 
 	var sessions []SessionDetail
 
-	for rows.Next() {
-		var (
-			sessID, wtID, projID                                      int
-			sessName, wtBranch, wtPath, projName, projURL, projPath   string
-			wtIsMain                                                  bool
-			sessCreated, sessAttached, wtCreated, wtUsed, projCreated time.Time
-			projFetched                                               sql.NullTime
-		)
-
-		err := rows.Scan(
-			&sessID, &wtID, &sessName, &sessCreated, &sessAttached,
-			&wtID, &projID, &wtBranch, &wtPath, &wtIsMain, &wtCreated, &wtUsed,
-			&projID, &projName, &projURL, &projPath, &projCreated, &projFetched,
-		)
+	// Build session details by matching worktrees to running sessions
+	for _, proj := range projects {
+		worktrees, err := state.DiscoverWorktrees(proj)
 		if err != nil {
-			return eris.Wrap(err, "failed to scan session row")
+			continue
 		}
 
-		var lastFetched *time.Time
-		if projFetched.Valid {
-			lastFetched = &projFetched.Time
+		for _, wt := range worktrees {
+			// Generate expected session name
+			sessionName := workspace.GenerateSessionName(proj.Name, wt.Branch)
+
+			// Check if this session is running
+			isRunning := false
+			for _, runningSess := range runningSessions {
+				if runningSess == sessionName {
+					isRunning = true
+					break
+				}
+			}
+
+			sessions = append(sessions, SessionDetail{
+				SessionName:  sessionName,
+				ProjectName:  proj.Name,
+				Branch:       wt.Branch,
+				WorktreePath: wt.Path,
+				LastUsed:     wt.LastUsed,
+				IsRunning:    isRunning,
+			})
 		}
-
-		sessions = append(sessions, SessionDetail{
-			SessionID:    sessID,
-			SessionName:  sessName,
-			ProjectName:  projName,
-			Branch:       wtBranch,
-			WorktreePath: wtPath,
-			LastAttached: sessAttached,
-			LastUsed:     wtUsed,
-			LastFetched:  lastFetched,
-		})
-	}
-
-	if err := rows.Err(); err != nil {
-		return eris.Wrap(err, "error iterating session rows")
 	}
 
 	if len(sessions) == 0 {
-		fmt.Println("No sessions found.")
+		fmt.Println("No worktrees found.")
 		fmt.Println("Clone a repository with: sesh clone <remote-url>")
 		fmt.Println("Or switch to a branch with: sesh switch <branch>")
 		return nil
@@ -202,15 +181,20 @@ func listAllSessions(database *sql.DB) error {
 	}
 
 	// Print table header
-	fmt.Printf("%-30s %-20s %-30s %-15s\n", "PROJECT", "BRANCH", "SESSION NAME", "LAST USED")
-	fmt.Println(strings.Repeat("-", 100))
+	fmt.Printf("%-30s %-20s %-30s %-10s\n", "PROJECT", "BRANCH", "SESSION NAME", "STATUS")
+	fmt.Println(strings.Repeat("-", 95))
 
 	for _, sess := range sessions {
-		fmt.Printf("%-30s %-20s %-30s %-15s\n",
+		status := "stopped"
+		if sess.IsRunning {
+			status = "running"
+		}
+
+		fmt.Printf("%-30s %-20s %-30s %-10s\n",
 			truncate(sess.ProjectName, 30),
 			truncate(sess.Branch, 20),
 			truncate(sess.SessionName, 30),
-			formatTimeAgo(sess.LastAttached),
+			status,
 		)
 	}
 

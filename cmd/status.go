@@ -7,10 +7,11 @@ import (
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
-	"github.com/benoctopus/sesh/internal/db"
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
+	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 )
@@ -43,23 +44,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to load configuration")
 	}
 
-	// Ensure config directory exists (needed for database)
-	if err := config.EnsureConfigDir(); err != nil {
-		return eris.Wrap(err, "failed to ensure config directory")
-	}
-
-	// Initialize database
-	dbPath, err := config.GetDBPath()
-	if err != nil {
-		return eris.Wrap(err, "failed to get database path")
-	}
-
-	database, err := db.InitDB(dbPath)
-	if err != nil {
-		return eris.Wrap(err, "failed to initialize database")
-	}
-	defer database.Close()
-
 	// Initialize session manager
 	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
 	if err != nil {
@@ -78,8 +62,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to get current working directory")
 	}
 
-	// Try to resolve project from CWD
-	proj, err := project.ResolveProject(database, "", cwd)
+	// Try to resolve project from CWD using filesystem state
+	proj, err := project.ResolveProject(cfg.WorkspaceDir, "", cwd)
 	if err != nil {
 		// Not in a project directory
 		if currentSessionName != "" {
@@ -105,30 +89,28 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Branch: %s\n", branch)
 		}
 
-		// Get worktree info from database
-		worktree, err := db.GetWorktree(database, proj.ID, branch)
+		// Get worktree info from filesystem state
+		worktree, err := state.GetWorktree(proj, branch)
 		if err == nil {
 			fmt.Printf("Worktree: %s\n", worktree.Path)
 			fmt.Printf("Last Used: %s\n", formatTimeAgo(worktree.LastUsed))
 
-			// Get session info
-			sess, err := db.GetSessionByWorktree(database, worktree.ID)
-			if err == nil && sess != nil {
-				fmt.Printf("Session: %s\n", sess.TmuxSessionName)
+			// Generate session name
+			sessionName := workspace.GenerateSessionName(proj.Name, branch)
+			fmt.Printf("Session: %s\n", sessionName)
 
-				// Check if session is running
-				exists, err := sessionMgr.Exists(sess.TmuxSessionName)
-				if err == nil {
-					if exists {
-						fmt.Printf("Session Status: Running\n")
-					} else {
-						fmt.Printf("Session Status: Not Running\n")
-					}
+			// Check if session is running
+			exists, err := sessionMgr.Exists(sessionName)
+			if err == nil {
+				if exists {
+					fmt.Printf("Session Status: Running\n")
+				} else {
+					fmt.Printf("Session Status: Not Running\n")
 				}
+			}
 
-				if currentSessionName != "" && currentSessionName == sess.TmuxSessionName {
-					fmt.Printf("(You are currently in this session)\n")
-				}
+			if currentSessionName != "" && currentSessionName == sessionName {
+				fmt.Printf("(You are currently in this session)\n")
 			}
 		}
 
@@ -141,9 +123,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// List other sessions for this project
-	worktrees, err := db.GetWorktreesByProject(database, proj.ID)
+	worktrees, err := state.DiscoverWorktrees(proj)
 	if err != nil {
-		return eris.Wrap(err, "failed to get worktrees")
+		return eris.Wrap(err, "failed to discover worktrees")
 	}
 
 	if len(worktrees) > 1 {
@@ -157,14 +139,12 @@ func runStatus(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			sess, err := db.GetSessionByWorktree(database, wt.ID)
-			if err != nil || sess == nil {
-				continue
-			}
+			// Generate session name
+			sessionName := workspace.GenerateSessionName(proj.Name, wt.Branch)
 
 			// Check if session is running
 			status := ""
-			exists, err := sessionMgr.Exists(sess.TmuxSessionName)
+			exists, err := sessionMgr.Exists(sessionName)
 			if err == nil {
 				if exists {
 					status = " (running)"
@@ -174,7 +154,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			}
 
 			fmt.Printf("  %s%s - last used %s\n",
-				sess.TmuxSessionName,
+				sessionName,
 				status,
 				formatTimeAgo(wt.LastUsed),
 			)

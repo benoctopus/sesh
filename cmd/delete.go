@@ -2,18 +2,18 @@ package cmd
 
 import (
 	"bufio"
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
-	"github.com/benoctopus/sesh/internal/db"
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/models"
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
+	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 )
@@ -57,37 +57,20 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to load configuration")
 	}
 
-	// Ensure config directory exists (needed for database)
-	if err := config.EnsureConfigDir(); err != nil {
-		return eris.Wrap(err, "failed to ensure config directory")
-	}
-
-	// Initialize database
-	dbPath, err := config.GetDBPath()
-	if err != nil {
-		return eris.Wrap(err, "failed to get database path")
-	}
-
-	database, err := db.InitDB(dbPath)
-	if err != nil {
-		return eris.Wrap(err, "failed to initialize database")
-	}
-	defer database.Close()
-
 	// Get current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
 		return eris.Wrap(err, "failed to get current working directory")
 	}
 
-	// Resolve project
-	proj, err := project.ResolveProject(database, deleteProjectName, cwd)
+	// Resolve project from filesystem state
+	proj, err := project.ResolveProject(cfg.WorkspaceDir, deleteProjectName, cwd)
 	if err != nil {
 		return eris.Wrap(err, "failed to resolve project")
 	}
 
 	if deleteAll {
-		return deleteProject(database, cfg, proj)
+		return deleteProject(cfg, proj)
 	}
 
 	// Delete specific branch
@@ -96,14 +79,14 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	branch := args[0]
-	return deleteBranch(database, cfg, proj, branch)
+	return deleteBranch(cfg, proj, branch)
 }
 
-func deleteProject(database *sql.DB, cfg *config.Config, proj *models.Project) error {
+func deleteProject(cfg *config.Config, proj *models.Project) error {
 	// Get all worktrees for this project
-	worktrees, err := db.GetWorktreesByProject(database, proj.ID)
+	worktrees, err := state.DiscoverWorktrees(proj)
 	if err != nil {
-		return eris.Wrap(err, "failed to get worktrees")
+		return eris.Wrap(err, "failed to discover worktrees")
 	}
 
 	if !deleteForce {
@@ -137,22 +120,17 @@ func deleteProject(database *sql.DB, cfg *config.Config, proj *models.Project) e
 
 	// Delete all sessions
 	for _, wt := range worktrees {
-		sess, err := db.GetSessionByWorktree(database, wt.ID)
-		if err != nil && !eris.Is(err, sql.ErrNoRows) {
-			fmt.Printf("Warning: failed to get session for worktree %d: %v\n", wt.ID, err)
-			continue
-		}
+		// Generate session name
+		sessionName := workspace.GenerateSessionName(proj.Name, wt.Branch)
 
-		if sess != nil {
-			// Kill session if it exists
-			exists, err := sessionMgr.Exists(sess.TmuxSessionName)
-			if err != nil {
-				fmt.Printf("Warning: failed to check session existence: %v\n", err)
-			} else if exists {
-				fmt.Printf("Killing %s session: %s\n", sessionMgr.Name(), sess.TmuxSessionName)
-				if err := sessionMgr.Delete(sess.TmuxSessionName); err != nil {
-					fmt.Printf("Warning: failed to kill session: %v\n", err)
-				}
+		// Kill session if it exists
+		exists, err := sessionMgr.Exists(sessionName)
+		if err != nil {
+			fmt.Printf("Warning: failed to check session existence: %v\n", err)
+		} else if exists {
+			fmt.Printf("Killing %s session: %s\n", sessionMgr.Name(), sessionName)
+			if err := sessionMgr.Delete(sessionName); err != nil {
+				fmt.Printf("Warning: failed to kill session: %v\n", err)
 			}
 		}
 
@@ -170,23 +148,15 @@ func deleteProject(database *sql.DB, cfg *config.Config, proj *models.Project) e
 		return eris.Wrap(err, "failed to remove project directory")
 	}
 
-	// Delete from database
-	if err := db.DeleteProject(database, proj.ID); err != nil {
-		return eris.Wrap(err, "failed to delete project from database")
-	}
-
 	fmt.Printf("\nSuccessfully deleted project: %s\n", proj.Name)
 	return nil
 }
 
-func deleteBranch(database *sql.DB, cfg *config.Config, proj *models.Project, branch string) error {
-	// Get worktree
-	worktree, err := db.GetWorktree(database, proj.ID, branch)
+func deleteBranch(cfg *config.Config, proj *models.Project, branch string) error {
+	// Get worktree from filesystem state
+	worktree, err := state.GetWorktree(proj, branch)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return eris.Errorf("worktree for branch %s not found", branch)
-		}
-		return eris.Wrap(err, "failed to get worktree")
+		return eris.Errorf("worktree for branch %s not found", branch)
 	}
 
 	// Check if this is the main worktree
@@ -219,27 +189,17 @@ func deleteBranch(database *sql.DB, cfg *config.Config, proj *models.Project, br
 		return eris.Wrap(err, "failed to initialize session manager")
 	}
 
-	// Get and delete session
-	sess, err := db.GetSessionByWorktree(database, worktree.ID)
-	if err != nil && !eris.Is(err, sql.ErrNoRows) {
-		return eris.Wrap(err, "failed to get session")
-	}
+	// Generate session name
+	sessionName := workspace.GenerateSessionName(proj.Name, branch)
 
-	if sess != nil {
-		// Kill session if it exists
-		exists, err := sessionMgr.Exists(sess.TmuxSessionName)
-		if err != nil {
-			fmt.Printf("Warning: failed to check session existence: %v\n", err)
-		} else if exists {
-			fmt.Printf("Killing %s session: %s\n", sessionMgr.Name(), sess.TmuxSessionName)
-			if err := sessionMgr.Delete(sess.TmuxSessionName); err != nil {
-				fmt.Printf("Warning: failed to kill session: %v\n", err)
-			}
-		}
-
-		// Delete session from database
-		if err := db.DeleteSession(database, sess.ID); err != nil {
-			return eris.Wrap(err, "failed to delete session from database")
+	// Kill session if it exists
+	exists, err := sessionMgr.Exists(sessionName)
+	if err != nil {
+		fmt.Printf("Warning: failed to check session existence: %v\n", err)
+	} else if exists {
+		fmt.Printf("Killing %s session: %s\n", sessionMgr.Name(), sessionName)
+		if err := sessionMgr.Delete(sessionName); err != nil {
+			fmt.Printf("Warning: failed to kill session: %v\n", err)
 		}
 	}
 
@@ -247,11 +207,6 @@ func deleteBranch(database *sql.DB, cfg *config.Config, proj *models.Project, br
 	fmt.Printf("Removing worktree: %s\n", worktree.Path)
 	if err := git.RemoveWorktree(proj.LocalPath, worktree.Path); err != nil {
 		return eris.Wrap(err, "failed to remove worktree")
-	}
-
-	// Delete worktree from database
-	if err := db.DeleteWorktree(database, worktree.ID); err != nil {
-		return eris.Wrap(err, "failed to delete worktree from database")
 	}
 
 	fmt.Printf("\nSuccessfully deleted worktree for branch: %s\n", branch)
