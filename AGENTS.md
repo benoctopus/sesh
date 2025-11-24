@@ -187,7 +187,7 @@ if err := cmd.Run(); err != nil {
 3. **External tools via Nix** - Add non-Go dependencies to `flake.nix`
 4. **Cobra for CLI** - Don't create custom command parsing
 5. **Config directory** - Use `os.UserConfigDir()` + `sesh` subdirectory
-6. **Use `task` for builds** - Always use `task build`, `task test`, etc. instead of direct `go` commands
+6. **Use `task` for builds and use as a go tool** - Always use `go tool task build`, `go tool task test`, etc. instead of direct `go` commands
 7. **Binary output to `dist/`** - All built binaries must go to the `dist/` directory
 8. **Keep it simple** - This is a CLI tool, not a web service. Avoid over-engineering.
 9. Leverage existing tools like fzf or peco for interactive selection if needed.
@@ -195,7 +195,7 @@ if err := cmd.Run(); err != nil {
 
 ## Task Runner
 
-This project uses [go-task](https://taskfile.dev) for common development tasks. All build, test, and development commands should be executed via `task`.
+This project uses [go-task](https://taskfile.dev) for common development tasks. All build, test, and development commands should be executed via `go tool task`.
 
 ### Common Tasks
 
