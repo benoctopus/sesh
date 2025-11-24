@@ -40,8 +40,10 @@ func EnsureProjectDir(projectPath string) error {
 }
 
 // GenerateSessionName generates a unique session name from project name and branch
-// Format: <repoName>:<branch>
-// Example: "repo:main", "myproject:feature-foo"
+// Format: <repoName>-<branch>
+// Example: "repo-main", "myproject-feature-foo"
+// Note: We use "-" instead of ":" because ":" is a special character in tmux
+// that separates session names from window names (e.g., "session:window")
 func GenerateSessionName(projectName, branch string) string {
 	// Extract repository name from project path (last component)
 	repoName := filepath.Base(projectName)
@@ -49,7 +51,7 @@ func GenerateSessionName(projectName, branch string) string {
 	// Sanitize branch name for session compatibility
 	sanitizedBranch := SanitizeBranchName(branch)
 
-	return fmt.Sprintf("%s:%s", repoName, sanitizedBranch)
+	return fmt.Sprintf("%s-%s", repoName, sanitizedBranch)
 }
 
 // SanitizeBranchName sanitizes a branch name for use in filesystem paths and session names
@@ -94,14 +96,17 @@ func SanitizeBranchName(branch string) string {
 }
 
 // ParseSessionName parses a session name back into repository and branch
-// Format: <repoName>:<branch>
+// Format: <repoName>-<branch>
 // Returns: repoName, branch, error
 func ParseSessionName(sessionName string) (string, string, error) {
-	parts := strings.SplitN(sessionName, ":", 2)
-	if len(parts) != 2 {
+	// Find the first hyphen to split repo name and branch
+	// We need to be careful because branch names can also contain hyphens
+	// For now, we'll use a simple split on the first hyphen
+	idx := strings.Index(sessionName, "-")
+	if idx == -1 {
 		return "", "", eris.Errorf("invalid session name format: %s", sessionName)
 	}
-	return parts[0], parts[1], nil
+	return sessionName[:idx], sessionName[idx+1:], nil
 }
 
 // GetRepoNameFromProject extracts the repository name from a full project path
