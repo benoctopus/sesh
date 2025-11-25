@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/benoctopus/sesh/internal/config"
@@ -83,12 +82,11 @@ func listAllProjects(cfg *config.Config) error {
 		return nil
 	}
 
-	// Print table header
+	// Print tree header
 	fmt.Printf("\n%s\n", ui.Bold("Projects"))
-	fmt.Printf("%-50s %-12s %-20s\n", ui.Faint("PROJECT"), ui.Faint("WORKTREES"), ui.Faint("CREATED"))
-	fmt.Println(strings.Repeat("─", 85))
+	fmt.Println()
 
-	for _, proj := range projects {
+	for i, proj := range projects {
 		// Get worktree count
 		worktrees, err := state.DiscoverWorktrees(proj)
 		if err != nil {
@@ -96,15 +94,39 @@ func listAllProjects(cfg *config.Config) error {
 			continue
 		}
 
+		isLast := i == len(projects)-1
 		created := formatTimeAgo(proj.CreatedAt)
 
-		fmt.Printf("%-50s %s%-12d%s %s\n",
-			truncate(proj.Name, 50),
-			ui.Info(""),
-			len(worktrees),
-			ui.Info(""),
-			ui.Faint(created),
+		// Print project node
+		prefix := "├──"
+		childPrefix := "│   "
+		if isLast {
+			prefix = "└──"
+			childPrefix = "    "
+		}
+
+		fmt.Printf("%s %s %s\n",
+			ui.Faint(prefix),
+			ui.Bold(proj.Name),
+			ui.Faint(fmt.Sprintf("(%d worktree%s, created %s)", len(worktrees), pluralize(len(worktrees)), created)),
 		)
+
+		// Print worktrees as children
+		for j, wt := range worktrees {
+			isLastWorktree := j == len(worktrees)-1
+			wtPrefix := "├──"
+			if isLastWorktree {
+				wtPrefix = "└──"
+			}
+
+			lastUsed := formatTimeAgo(wt.LastUsed)
+			fmt.Printf("%s%s %s %s\n",
+				ui.Faint(childPrefix),
+				ui.Faint(wtPrefix),
+				ui.Info(wt.Branch),
+				ui.Faint(fmt.Sprintf("(last used %s)", lastUsed)),
+			)
+		}
 	}
 	fmt.Println()
 
@@ -188,26 +210,63 @@ func listAllSessions(cfg *config.Config) error {
 		return nil
 	}
 
-	// Print table header
-	fmt.Printf("\n%s\n", ui.Bold("Sessions"))
-	fmt.Printf("%-30s %-20s %-30s %-10s\n", ui.Faint("PROJECT"), ui.Faint("BRANCH"), ui.Faint("SESSION NAME"), ui.Faint("STATUS"))
-	fmt.Println(strings.Repeat("─", 95))
+	// Group sessions by project for tree rendering
+	projectMap := make(map[string][]SessionDetail)
+	var projectOrder []string
+	projectSeen := make(map[string]bool)
 
 	for _, sess := range sessions {
-		statusText := ui.Faint("stopped")
-		statusIcon := "○"
-		if sess.IsRunning {
-			statusText = ui.Success("running")
-			statusIcon = ui.Success("●")
+		if !projectSeen[sess.ProjectName] {
+			projectOrder = append(projectOrder, sess.ProjectName)
+			projectSeen[sess.ProjectName] = true
+		}
+		projectMap[sess.ProjectName] = append(projectMap[sess.ProjectName], sess)
+	}
+
+	// Print tree header
+	fmt.Printf("\n%s\n", ui.Bold("Sessions"))
+	fmt.Println()
+
+	for i, projName := range projectOrder {
+		isLastProject := i == len(projectOrder)-1
+		projSessions := projectMap[projName]
+
+		// Print project node
+		prefix := "├──"
+		childPrefix := "│   "
+		if isLastProject {
+			prefix = "└──"
+			childPrefix = "    "
 		}
 
-		fmt.Printf("%-30s %-20s %-30s %s %s\n",
-			truncate(sess.ProjectName, 30),
-			ui.Info(truncate(sess.Branch, 20)),
-			ui.Faint(truncate(sess.SessionName, 30)),
-			statusIcon,
-			statusText,
+		fmt.Printf("%s %s\n",
+			ui.Faint(prefix),
+			ui.Bold(projName),
 		)
+
+		// Print sessions/branches as children
+		for j, sess := range projSessions {
+			isLastSession := j == len(projSessions)-1
+			sessPrefix := "├──"
+			if isLastSession {
+				sessPrefix = "└──"
+			}
+
+			statusIcon := ui.Faint("○")
+			statusText := ui.Faint("stopped")
+			if sess.IsRunning {
+				statusIcon = ui.Success("●")
+				statusText = ui.Success("running")
+			}
+
+			fmt.Printf("%s%s %s %s %s\n",
+				ui.Faint(childPrefix),
+				ui.Faint(sessPrefix),
+				ui.Info(sess.Branch),
+				statusIcon,
+				statusText,
+			)
+		}
 	}
 	fmt.Println()
 
@@ -265,4 +324,12 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// pluralize returns "s" if count is not 1, otherwise empty string
+func pluralize(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }
