@@ -2,6 +2,7 @@ package fuzzy
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -258,26 +259,12 @@ func RunFuzzyFinderFromReader(reader io.ReadCloser, finder string) (string, erro
 
 	// Pipe the reader directly to fzf's stdin
 	cmd.Stdin = reader
-
-	// Capture stdout for the selection
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", eris.Wrap(err, "failed to create stdout pipe")
-	}
-
-	// Set stderr to show errors
+	cmd.Stdout = bytes.NewBuffer(nil)
 	cmd.Stderr = os.Stderr
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
 		return "", eris.Wrap(err, "failed to start fuzzy finder")
-	}
-
-	// Read the selected item
-	scanner := bufio.NewScanner(stdout)
-	var selected string
-	if scanner.Scan() {
-		selected = strings.TrimSpace(scanner.Text())
 	}
 
 	// Wait for the command to finish
@@ -289,6 +276,7 @@ func RunFuzzyFinderFromReader(reader io.ReadCloser, finder string) (string, erro
 		return "", eris.Wrap(err, "fuzzy finder failed")
 	}
 
+	selected := strings.TrimSpace(cmd.Stdout.(*bytes.Buffer).String())
 	if selected == "" {
 		return "", eris.New("no selection made")
 	}

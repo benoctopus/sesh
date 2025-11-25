@@ -39,8 +39,10 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(switchCmd)
-	switchCmd.Flags().BoolVarP(&switchCreateBranch, "create", "b", false, "Create a new branch (like git checkout -b)")
-	switchCmd.Flags().StringVarP(&switchProjectName, "project", "p", "", "Specify project explicitly")
+	switchCmd.Flags().
+		BoolVarP(&switchCreateBranch, "create", "b", false, "Create a new branch (like git checkout -b)")
+	switchCmd.Flags().
+		StringVarP(&switchProjectName, "project", "p", "", "Specify project explicitly")
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -70,12 +72,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		// Start git fetch in background - don't wait for it
 		go func() {
 			if err := git.Fetch(proj.LocalPath); err != nil {
-				// Silently ignore fetch errors
+				fmt.Fprintf(os.Stderr, "warning: git fetch failed: %s\n", eris.ToString(err, true))
 			}
 		}()
 
 		// Stream branches directly from git to fzf for instant UI
-		branchReader, err := git.StreamRemoteBranches(proj.LocalPath)
+		branchReader, err := git.StreamRemoteBranches(cmd.Context(), proj.LocalPath)
 		if err != nil {
 			return eris.Wrap(err, "failed to start branch listing")
 		}

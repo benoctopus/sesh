@@ -20,6 +20,9 @@ var (
 	listJSON     bool
 )
 
+// BUG: Fix list output such that it does not contain an entry with an empty branch, presumably representing
+// the bare project with no checkout.
+
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List projects, worktrees, and sessions",

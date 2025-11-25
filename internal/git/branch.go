@@ -2,7 +2,10 @@ package git
 
 import (
 	"bufio"
+	"context"
+	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -32,7 +35,14 @@ func ListLocalBranches(repoPath string) ([]string, error) {
 // For bare repositories, lists branches from refs/heads/
 func ListRemoteBranches(repoPath string) ([]string, error) {
 	// Try listing branches using for-each-ref which works for both bare and normal repos
-	cmd := exec.Command("git", "-C", repoPath, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	cmd := exec.Command(
+		"git",
+		"-C",
+		repoPath,
+		"for-each-ref",
+		"--format=%(refname:short)",
+		"refs/heads/",
+	)
 	output, err := cmd.Output()
 	if err != nil {
 		// Fallback to branch -r for normal repos
@@ -68,9 +78,17 @@ func ListRemoteBranches(repoPath string) ([]string, error) {
 // StreamRemoteBranches returns a reader that streams branch names and the cleanup function
 // The reader will output one branch name per line as git produces them
 // The caller must call cleanup() when done to ensure the process terminates
-func StreamRemoteBranches(repoPath string) (io.ReadCloser, error) {
+func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, error) {
 	// Use for-each-ref which works for both bare and normal repos
-	cmd := exec.Command("git", "-C", repoPath, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	cmd := exec.CommandContext(
+		ctx,
+		"git",
+		"-C",
+		repoPath,
+		"for-each-ref",
+		"--format=%(refname:short)",
+		"refs/heads/",
+	)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -86,21 +104,48 @@ func StreamRemoteBranches(repoPath string) (io.ReadCloser, error) {
 
 	// Transform output in a goroutine
 	go func() {
-		defer writer.Close()
-		defer stdout.Close()
+		ctx, cancel := context.WithCancelCause(ctx)
+		defer cancel(nil)
+
+		defer func() {
+			if err := writer.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error closing writer: %v\n", err)
+			}
+			if err := stdout.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error closing stdout: %v\n", err)
+			}
+		}()
+
+		defer writer.Close() //nolint:errcheck
+		defer stdout.Close() //nolint:errcheck
 
 		// Wait for command to finish when done reading
-		defer cmd.Wait()
+		defer func() {
+			var err error
+			defer cancel(err)
+
+			if err = cmd.Wait(); err != nil {
+				fmt.Fprintf(
+					os.Stderr,
+					"Git command error: %s\n",
+					eris.ToString(err, true),
+				)
+			}
+		}()
 
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
+			if ctx.Err() != nil {
+				return // Context cancelled
+			}
+
 			branch := strings.TrimSpace(scanner.Text())
 			if branch != "" && !strings.Contains(branch, "HEAD") {
 				// Remove "origin/" prefix if present
-				if strings.HasPrefix(branch, "origin/") {
-					branch = strings.TrimPrefix(branch, "origin/")
+				if after, ok := strings.CutPrefix(branch, "origin/"); ok {
+					branch = after
 				}
-				io.WriteString(writer, branch+"\n")
+				fmt.Fprintln(writer, branch) //nolint:errcheck
 			}
 		}
 	}()
@@ -162,7 +207,14 @@ func DoesBranchExist(repoPath, branch string) (bool, error) {
 	}
 
 	// Check remote branch
-	cmd = exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/remotes/origin/"+branch)
+	cmd = exec.Command(
+		"git",
+		"-C",
+		repoPath,
+		"rev-parse",
+		"--verify",
+		"refs/remotes/origin/"+branch,
+	)
 	err = cmd.Run()
 	if err == nil {
 		return true, nil
@@ -214,7 +266,14 @@ func DoesRemoteBranchExist(repoPath, branch string) (bool, error) {
 	}
 
 	// Then try refs/remotes/origin/ (for normal repos)
-	cmd = exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/remotes/origin/"+branch)
+	cmd = exec.Command(
+		"git",
+		"-C",
+		repoPath,
+		"rev-parse",
+		"--verify",
+		"refs/remotes/origin/"+branch,
+	)
 	err = cmd.Run()
 	if err == nil {
 		return true, nil
