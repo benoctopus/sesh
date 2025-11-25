@@ -893,7 +893,7 @@ sesh fetch --all
 **Objective**: Wire all components together and ensure proper error handling.
 
 **Tasks**:
-- [ ] Create database connection initialization in root command
+- [ ] ~Create database connection initialization in root command~ (database has been removed from the plan)
 - [ ] Pass database connection to all commands
 - [ ] Implement graceful database cleanup on exit
 - [ ] Ensure all errors use eris wrapping
@@ -959,12 +959,14 @@ sesh fetch --all
 **Objective**: Improve CLI usability and output formatting.
 
 **Tasks**:
+- [ ] Add ability to add a command or script to run on opening a session (e.g. direnv allow)
+  - This should be configurable as a flag, globally, and per project
+  - implement a yaml config file format that gets stored in the os config dir and/or in a 
+    repository root.
 - [ ] Add colored output for better readability
   - Consider: `github.com/fatih/color` or `github.com/charmbracelet/lipgloss`
 - [ ] Add table formatting for list command
   - Consider: `github.com/olekukonko/tablewriter` or `github.com/charmbracelet/bubbles`
-- [ ] Add interactive session selection with fzf
-  - Command: `sesh list | fzf | xargs sesh attach`
 - [ ] Add shell completion scripts (bash, zsh, fish)
   - Use Cobra's built-in completion generation
 
@@ -991,22 +993,8 @@ sesh fetch --all
 
 **Estimated Time**: 2-3 hours
 
----
+--- 
 
-### 5.3 Build & Distribution
-
-**Objective**: Prepare for distribution and installation.
-
-**Tasks**:
-- [ ] Add `task release` to build for multiple platforms
-- [ ] Create install script or instructions
-- [ ] Consider adding to package managers (brew, apt, etc.)
-- [ ] Add version information to binary
-- [ ] Create GitHub releases with binaries
-
-**Estimated Time**: 2-3 hours
-
----
 
 ## Dependencies
 
