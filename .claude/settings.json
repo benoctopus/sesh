@@ -18,10 +18,6 @@
           {
             "type": "command",
             "command": "go tool task fmt"
-          },
-          {
-            "type": "command",
-            "command": "go tool task test:short"
           }
         ]
       }

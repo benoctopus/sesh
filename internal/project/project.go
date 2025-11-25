@@ -1,31 +1,34 @@
 package project
 
 import (
-	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/benoctopus/sesh/internal/db"
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/models"
+	"github.com/benoctopus/sesh/internal/state"
 	"github.com/rotisserie/eris"
 )
 
 // ResolveProject resolves a project from a project name or current working directory
 // If projectName is empty, it will attempt to detect the project from CWD
+// Supports both full project names (github.com/user/repo) and short names (repo)
 // Priority:
-// 1. If projectName is provided, look it up in the database
+// 1. If projectName is provided, try exact match first, then short name match
 // 2. If projectName is empty, detect project from CWD
 // 3. Return error if not found
-func ResolveProject(database *sql.DB, projectName string, cwd string) (*models.Project, error) {
+func ResolveProject(workspaceDir, projectName string, cwd string) (*models.Project, error) {
 	// If project name is explicitly provided, look it up
 	if projectName != "" {
-		project, err := db.GetProject(database, projectName)
-		if err != nil {
-			return nil, eris.Wrapf(err, "project '%s' not found", projectName)
+		// First try exact match with full name
+		project, err := state.GetProject(workspaceDir, projectName)
+		if err == nil {
+			return project, nil
 		}
-		return project, nil
+
+		// If not found by exact match, try to find by short name (repo name only)
+		return state.GetProjectByShortName(workspaceDir, projectName)
 	}
 
 	// Try to detect project from CWD
@@ -34,10 +37,10 @@ func ResolveProject(database *sql.DB, projectName string, cwd string) (*models.P
 		return nil, eris.Wrap(err, "could not detect project from current directory")
 	}
 
-	// Look up detected project in database
-	project, err := db.GetProject(database, detectedName)
+	// Look up detected project from filesystem state
+	project, err := state.GetProject(workspaceDir, detectedName)
 	if err != nil {
-		return nil, eris.Wrapf(err, "detected project '%s' not found in database", detectedName)
+		return nil, eris.Wrapf(err, "detected project '%s' not found in workspace", detectedName)
 	}
 
 	return project, nil
@@ -118,8 +121,8 @@ func GetProjectRemoteURL(projectPath string) (string, error) {
 
 // ResolveProjectOrPrompt resolves a project with helpful error messages
 // If no project is found, it returns a user-friendly error with suggestions
-func ResolveProjectOrPrompt(database *sql.DB, projectName string, cwd string) (*models.Project, error) {
-	project, err := ResolveProject(database, projectName, cwd)
+func ResolveProjectOrPrompt(workspaceDir, projectName string, cwd string) (*models.Project, error) {
+	project, err := ResolveProject(workspaceDir, projectName, cwd)
 	if err != nil {
 		// Provide helpful error message
 		if projectName == "" {
@@ -144,15 +147,15 @@ func ResolveProjectOrPrompt(database *sql.DB, projectName string, cwd string) (*
 
 // DetectWorktreeFromCWD detects which worktree the current directory is in
 // Returns the worktree path if found, otherwise returns empty string
-func DetectWorktreeFromCWD(database *sql.DB, cwd string) (*models.Worktree, error) {
+func DetectWorktreeFromCWD(workspaceDir, cwd string) (*models.Worktree, error) {
 	// First, ensure we're in a git repository
 	gitRoot, err := FindGitRoot(cwd)
 	if err != nil {
 		return nil, eris.Wrap(err, "not in a git repository")
 	}
 
-	// Get the worktree from database by path
-	worktree, err := db.GetWorktreeByPath(database, gitRoot)
+	// Get the worktree from filesystem state by path
+	worktree, err := state.GetWorktreeByPath(workspaceDir, gitRoot)
 	if err != nil {
 		return nil, eris.Wrap(err, "current directory is not a sesh-managed worktree")
 	}

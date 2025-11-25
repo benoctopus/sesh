@@ -1,17 +1,15 @@
 package cmd
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 
 	"github.com/benoctopus/sesh/internal/config"
-	"github.com/benoctopus/sesh/internal/db"
 	"github.com/benoctopus/sesh/internal/fuzzy"
 	"github.com/benoctopus/sesh/internal/git"
-	"github.com/benoctopus/sesh/internal/models"
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
+	"github.com/benoctopus/sesh/internal/state"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
@@ -41,8 +39,10 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(switchCmd)
-	switchCmd.Flags().BoolVarP(&switchCreateBranch, "create", "b", false, "Create a new branch (like git checkout -b)")
-	switchCmd.Flags().StringVarP(&switchProjectName, "project", "p", "", "Specify project explicitly")
+	switchCmd.Flags().
+		BoolVarP(&switchCreateBranch, "create", "b", false, "Create a new branch (like git checkout -b)")
+	switchCmd.Flags().
+		StringVarP(&switchProjectName, "project", "p", "", "Specify project explicitly")
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -52,26 +52,14 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to load configuration")
 	}
 
-	// Initialize database
-	dbPath, err := config.GetDBPath()
-	if err != nil {
-		return eris.Wrap(err, "failed to get database path")
-	}
-
-	database, err := db.InitDB(dbPath)
-	if err != nil {
-		return eris.Wrap(err, "failed to initialize database")
-	}
-	defer database.Close()
-
 	// Get current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
 		return eris.Wrap(err, "failed to get current working directory")
 	}
 
-	// Resolve project
-	proj, err := project.ResolveProject(database, switchProjectName, cwd)
+	// Resolve project from filesystem state
+	proj, err := project.ResolveProject(cfg.WorkspaceDir, switchProjectName, cwd)
 	if err != nil {
 		return eris.Wrap(err, "failed to resolve project")
 	}
@@ -80,24 +68,21 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		branch = args[0]
 	} else {
-		// No branch specified, use fuzzy finder
-		fmt.Println("Fetching latest branches...")
-		if err := git.Fetch(proj.LocalPath); err != nil {
-			fmt.Printf("Warning: failed to fetch: %v\n", err)
-		}
+		// No branch specified, use streaming fuzzy finder
+		// Start git fetch in background - don't wait for it
+		go func() {
+			if err := git.Fetch(proj.LocalPath); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: git fetch failed: %s\n", eris.ToString(err, true))
+			}
+		}()
 
-		// Get all branches
-		branches, err := git.ListRemoteBranches(proj.LocalPath)
+		// Stream branches directly from git to fzf for instant UI
+		branchReader, err := git.StreamRemoteBranches(cmd.Context(), proj.LocalPath)
 		if err != nil {
-			return eris.Wrap(err, "failed to list branches")
+			return eris.Wrap(err, "failed to start branch listing")
 		}
 
-		if len(branches) == 0 {
-			return eris.New("no branches found")
-		}
-
-		// Use fuzzy finder to select branch
-		selectedBranch, err := fuzzy.SelectBranch(branches)
+		selectedBranch, err := fuzzy.SelectBranchFromReader(branchReader)
 		if err != nil {
 			return eris.Wrap(err, "failed to select branch")
 		}
@@ -105,71 +90,36 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		branch = selectedBranch
 	}
 
-	// Check if worktree already exists
-	existingWorktree, err := db.GetWorktree(database, proj.ID, branch)
-	if err != nil && err != sql.ErrNoRows {
-		return eris.Wrap(err, "failed to check for existing worktree")
+	// Initialize session manager
+	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
+	if err != nil {
+		return eris.Wrap(err, "failed to initialize session manager")
 	}
 
-	if existingWorktree != nil {
-		// Worktree exists, attach to existing session
+	// Check if worktree already exists in filesystem
+	existingWorktree, err := state.GetWorktree(proj, branch)
+	if err == nil && existingWorktree != nil {
+		// Worktree exists, attach to existing or create new session
 		fmt.Printf("Switching to existing worktree: %s\n", existingWorktree.Path)
 
-		// Get or create session
-		sess, err := db.GetSessionByWorktree(database, existingWorktree.ID)
-		if err != nil && err != sql.ErrNoRows {
-			return eris.Wrap(err, "failed to get session")
-		}
-
-		// Initialize session manager
-		sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
-		if err != nil {
-			return eris.Wrap(err, "failed to initialize session manager")
-		}
-
-		if sess != nil {
-			// Session exists, check if it's still running
-			exists, err := sessionMgr.Exists(sess.TmuxSessionName)
-			if err != nil {
-				return eris.Wrap(err, "failed to check session existence")
-			}
-
-			if exists {
-				// Update last used timestamp
-				if err := db.UpdateWorktreeLastUsed(database, existingWorktree.ID); err != nil {
-					fmt.Printf("Warning: failed to update worktree timestamp: %v\n", err)
-				}
-				if err := db.UpdateSessionLastAttached(database, sess.ID); err != nil {
-					fmt.Printf("Warning: failed to update session timestamp: %v\n", err)
-				}
-
-				// Attach to session
-				return sessionMgr.Attach(sess.TmuxSessionName)
-			}
-
-			// Session doesn't exist anymore, recreate it
-			fmt.Printf("Recreating %s session...\n", sessionMgr.Name())
-			if err := sessionMgr.Create(sess.TmuxSessionName, existingWorktree.Path); err != nil {
-				return eris.Wrap(err, "failed to recreate session")
-			}
-
-			return sessionMgr.Attach(sess.TmuxSessionName)
-		}
-
-		// No session exists, create one
+		// Generate session name
 		sessionName := workspace.GenerateSessionName(proj.Name, branch)
+
+		// Check if session is running
+		exists, err := sessionMgr.Exists(sessionName)
+		if err != nil {
+			return eris.Wrap(err, "failed to check session existence")
+		}
+
+		if exists {
+			// Attach to existing session
+			return sessionMgr.Attach(sessionName)
+		}
+
+		// Session doesn't exist, create it
 		fmt.Printf("Creating %s session %s...\n", sessionMgr.Name(), sessionName)
 		if err := sessionMgr.Create(sessionName, existingWorktree.Path); err != nil {
 			return eris.Wrap(err, "failed to create session")
-		}
-
-		// Create session record
-		newSession := &models.Session{
-			WorktreeID:      existingWorktree.ID,
-			TmuxSessionName: sessionName,
-		}
-		if err := db.CreateSession(database, newSession); err != nil {
-			return eris.Wrap(err, "failed to create session in database")
 		}
 
 		return sessionMgr.Attach(sessionName)
@@ -217,31 +167,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create worktree record in database
-	newWorktree := &models.Worktree{
-		ProjectID: proj.ID,
-		Branch:    branch,
-		Path:      worktreePath,
-		IsMain:    false,
-	}
-	if err := db.CreateWorktree(database, newWorktree); err != nil {
-		return eris.Wrap(err, "failed to create worktree in database")
-	}
-
 	// Create session
 	sessionName := workspace.GenerateSessionName(proj.Name, branch)
 	fmt.Printf("Creating %s session %s...\n", sessionMgr.Name(), sessionName)
 	if err := sessionMgr.Create(sessionName, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to create session")
-	}
-
-	// Create session record in database
-	newSession := &models.Session{
-		WorktreeID:      newWorktree.ID,
-		TmuxSessionName: sessionName,
-	}
-	if err := db.CreateSession(database, newSession); err != nil {
-		return eris.Wrap(err, "failed to create session in database")
 	}
 
 	fmt.Printf("\nSuccessfully switched to %s\n", branch)

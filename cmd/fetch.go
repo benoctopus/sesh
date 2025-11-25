@@ -1,15 +1,14 @@
 package cmd
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 
 	"github.com/benoctopus/sesh/internal/config"
-	"github.com/benoctopus/sesh/internal/db"
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/models"
 	"github.com/benoctopus/sesh/internal/project"
+	"github.com/benoctopus/sesh/internal/state"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 )
@@ -41,20 +40,14 @@ func init() {
 }
 
 func runFetch(cmd *cobra.Command, args []string) error {
-	// Initialize database
-	dbPath, err := config.GetDBPath()
+	// Load configuration
+	cfg, err := config.LoadConfig()
 	if err != nil {
-		return eris.Wrap(err, "failed to get database path")
+		return eris.Wrap(err, "failed to load configuration")
 	}
-
-	database, err := db.InitDB(dbPath)
-	if err != nil {
-		return eris.Wrap(err, "failed to initialize database")
-	}
-	defer database.Close()
 
 	if fetchAll {
-		return fetchAllProjects(database)
+		return fetchAllProjects(cfg)
 	}
 
 	// Get current working directory
@@ -63,16 +56,16 @@ func runFetch(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to get current working directory")
 	}
 
-	// Resolve project
-	proj, err := project.ResolveProject(database, fetchProjectName, cwd)
+	// Resolve project from filesystem state
+	proj, err := project.ResolveProject(cfg.WorkspaceDir, fetchProjectName, cwd)
 	if err != nil {
 		return eris.Wrap(err, "failed to resolve project")
 	}
 
-	return fetchProject(database, proj)
+	return fetchProject(proj)
 }
 
-func fetchProject(database *sql.DB, proj *models.Project) error {
+func fetchProject(proj *models.Project) error {
 	fmt.Printf("Fetching %s...\n", proj.Name)
 
 	// Run git fetch
@@ -80,19 +73,15 @@ func fetchProject(database *sql.DB, proj *models.Project) error {
 		return eris.Wrap(err, "failed to fetch repository")
 	}
 
-	// Update last_fetched timestamp
-	if err := db.UpdateProjectFetchTime(database, proj.ID); err != nil {
-		return eris.Wrap(err, "failed to update fetch time")
-	}
-
 	fmt.Printf("Successfully fetched %s\n", proj.Name)
 	return nil
 }
 
-func fetchAllProjects(database *sql.DB) error {
-	projects, err := db.GetAllProjects(database)
+func fetchAllProjects(cfg *config.Config) error {
+	// Discover all projects from filesystem
+	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
 	if err != nil {
-		return eris.Wrap(err, "failed to get projects")
+		return eris.Wrap(err, "failed to discover projects")
 	}
 
 	if len(projects) == 0 {
@@ -114,12 +103,7 @@ func fetchAllProjects(database *sql.DB) error {
 			continue
 		}
 
-		if err := db.UpdateProjectFetchTime(database, proj.ID); err != nil {
-			fmt.Printf(" warning: failed to update timestamp: %v\n", err)
-		} else {
-			fmt.Printf(" done\n")
-		}
-
+		fmt.Printf(" done\n")
 		successCount++
 	}
 

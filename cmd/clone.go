@@ -1,15 +1,13 @@
 package cmd
 
 import (
-	"database/sql"
 	"fmt"
 	"path/filepath"
 
 	"github.com/benoctopus/sesh/internal/config"
-	"github.com/benoctopus/sesh/internal/db"
 	"github.com/benoctopus/sesh/internal/git"
-	"github.com/benoctopus/sesh/internal/models"
 	"github.com/benoctopus/sesh/internal/session"
+	"github.com/benoctopus/sesh/internal/state"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
@@ -46,30 +44,15 @@ func runClone(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to ensure workspace directory")
 	}
 
-	// Initialize database
-	dbPath, err := config.GetDBPath()
-	if err != nil {
-		return eris.Wrap(err, "failed to get database path")
-	}
-
-	database, err := db.InitDB(dbPath)
-	if err != nil {
-		return eris.Wrap(err, "failed to initialize database")
-	}
-	defer database.Close()
-
 	// Generate project name from remote URL
 	projectName, err := git.GenerateProjectName(remoteURL)
 	if err != nil {
 		return eris.Wrap(err, "failed to generate project name from remote URL")
 	}
 
-	// Check if project already exists
-	existingProject, err := db.GetProject(database, projectName)
-	if err != nil && err != sql.ErrNoRows {
-		return eris.Wrap(err, "failed to check for existing project")
-	}
-	if existingProject != nil {
+	// Check if project already exists by checking filesystem
+	existingProject, err := state.GetProject(cfg.WorkspaceDir, projectName)
+	if err == nil && existingProject != nil {
 		return eris.Errorf("project %s already exists in workspace", projectName)
 	}
 
@@ -83,16 +66,6 @@ func runClone(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to clone repository")
 	}
 
-	// Create project record in database
-	project := &models.Project{
-		Name:      projectName,
-		RemoteURL: remoteURL,
-		LocalPath: bareRepoPath,
-	}
-	if err := db.CreateProject(database, project); err != nil {
-		return eris.Wrap(err, "failed to create project in database")
-	}
-
 	// Get default branch
 	defaultBranch, err := git.GetDefaultBranch(bareRepoPath)
 	if err != nil {
@@ -103,18 +76,7 @@ func runClone(cmd *cobra.Command, args []string) error {
 	worktreePath := workspace.GetWorktreePath(projectPath, defaultBranch)
 	fmt.Printf("Creating worktree for branch %s...\n", defaultBranch)
 	if err := git.CreateWorktree(bareRepoPath, defaultBranch, worktreePath); err != nil {
-		return eris.Wrap(err, "failed to create worktree")
-	}
-
-	// Create worktree record in database
-	worktree := &models.Worktree{
-		ProjectID: project.ID,
-		Branch:    defaultBranch,
-		Path:      worktreePath,
-		IsMain:    true,
-	}
-	if err := db.CreateWorktree(database, worktree); err != nil {
-		return eris.Wrap(err, "failed to create worktree in database")
+		return eris.Wrap(err, "failed to clone worktree")
 	}
 
 	// Initialize session manager
@@ -130,15 +92,6 @@ func runClone(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Creating %s session %s...\n", sessionMgr.Name(), sessionName)
 	if err := sessionMgr.Create(sessionName, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to create session")
-	}
-
-	// Create session record in database
-	sess := &models.Session{
-		WorktreeID:      worktree.ID,
-		TmuxSessionName: sessionName,
-	}
-	if err := db.CreateSession(database, sess); err != nil {
-		return eris.Wrap(err, "failed to create session in database")
 	}
 
 	fmt.Printf("\nSuccessfully cloned %s\n", projectName)

@@ -74,25 +74,25 @@ func TestGenerateSessionName(t *testing.T) {
 			name:        "simple project and branch",
 			projectName: "myrepo",
 			branch:      "main",
-			expected:    "myrepo:main",
+			expected:    "myrepo-main",
 		},
 		{
 			name:        "full github path",
 			projectName: "github.com/user/repo",
 			branch:      "main",
-			expected:    "repo:main",
+			expected:    "repo-main",
 		},
 		{
 			name:        "branch with special chars",
 			projectName: "github.com/user/repo",
 			branch:      "feature/foo",
-			expected:    "repo:feature-foo",
+			expected:    "repo-feature-foo",
 		},
 		{
 			name:        "nested project path",
 			projectName: "gitlab.com/org/team/project",
 			branch:      "develop",
-			expected:    "project:develop",
+			expected:    "project-develop",
 		},
 	}
 
@@ -116,28 +116,28 @@ func TestParseSessionName(t *testing.T) {
 	}{
 		{
 			name:        "simple session name",
-			sessionName: "repo:main",
+			sessionName: "repo-main",
 			wantRepo:    "repo",
 			wantBranch:  "main",
 			wantErr:     false,
 		},
 		{
 			name:        "branch with hyphen",
-			sessionName: "myproject:feature-foo",
+			sessionName: "myproject-feature-foo",
 			wantRepo:    "myproject",
 			wantBranch:  "feature-foo",
 			wantErr:     false,
 		},
 		{
-			name:        "invalid format no colon",
+			name:        "invalid format no hyphen",
 			sessionName: "invalid",
 			wantErr:     true,
 		},
 		{
-			name:        "invalid format multiple colons",
-			sessionName: "repo:branch:extra",
+			name:        "branch with multiple hyphens",
+			sessionName: "repo-branch-extra",
 			wantRepo:    "repo",
-			wantBranch:  "branch:extra",
+			wantBranch:  "branch-extra",
 			wantErr:     false,
 		},
 	}

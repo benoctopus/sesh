@@ -25,7 +25,6 @@ tasks:
     cmds:
       - mkdir -p {{.DIST_DIR}}
       - go build -o {{.DIST_DIR}}/{{.BINARY_NAME}} {{.MAIN_PACKAGE}}
-    method: checksum
 
   build:debug:
     desc: Build the binary with debug symbols
@@ -41,9 +40,8 @@ tasks:
 
   run:
     desc: "Run the application (usage: task run -- [args])"
-    deps: [build]
     cmds:
-      - "{{.DIST_DIR}}/{{.BINARY_NAME}} {{.CLI_ARGS}}"
+      - go run {{.MAIN_PACKAGE}} {{.CLI_ARGS}}
 
   dev:
     desc: Run in development mode (rebuild on changes)

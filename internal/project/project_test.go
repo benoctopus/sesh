@@ -93,3 +93,7 @@ func TestExtractProjectFromRemote(t *testing.T) {
 		})
 	}
 }
+
+// TestResolveByShortName has been removed because resolveByShortName
+// is now an internal implementation detail of the state package.
+// Short name resolution is tested through integration tests.

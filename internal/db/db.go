@@ -10,7 +10,7 @@ import (
 	"github.com/rotisserie/eris"
 )
 
-// InitDB initializes a new database connection
+// InitDB initializes a new database connection and runs migrations
 func InitDB(dbPath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
@@ -27,6 +27,12 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	if err := db.Ping(); err != nil {
 		db.Close()
 		return nil, eris.Wrap(err, "failed to ping database")
+	}
+
+	// Run migrations
+	if err := RunMigrations(db); err != nil {
+		db.Close()
+		return nil, eris.Wrap(err, "failed to run migrations")
 	}
 
 	return db, nil
