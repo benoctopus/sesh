@@ -25,9 +25,9 @@ func CreateWorktree(repoPath, branch, worktreePath string) error {
 		repoPath,
 		"worktree",
 		"add",
-		"--guess-remote",
 		worktreePath,
-		"refs/heads/"+branch,
+		"origin/"+branch,
+		"--track",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -49,6 +49,7 @@ func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) 
 		branch,
 		worktreePath,
 		startPoint,
+		"--track",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -66,8 +67,11 @@ func CreateWorktreeFromRef(repoPath, ref, worktreePath string) error {
 		"worktree",
 		"add",
 		"--guess-remote",
-		worktreePath,
+		"-b",
 		ref,
+		worktreePath,
+		"origin/"+ref,
+		"--track",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

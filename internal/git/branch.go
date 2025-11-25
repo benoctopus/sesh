@@ -64,8 +64,8 @@ func ListRemoteBranches(repoPath string) ([]string, error) {
 				continue
 			}
 			// Remove "origin/" prefix
-			if strings.HasPrefix(branch, "origin/") {
-				result = append(result, strings.TrimPrefix(branch, "origin/"))
+			if trimmed, ok := strings.CutPrefix(branch, "origin/"); ok {
+				result = append(result, trimmed)
 			} else {
 				result = append(result, branch)
 			}
@@ -120,8 +120,16 @@ func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, 
 			}
 		}()
 
-		defer writer.Close() //nolint:errcheck
-		defer stdout.Close() //nolint:errcheck
+		local, err := ListLocalBranches(repoPath)
+		if err != nil {
+			cancel(eris.Wrap(err, "failed to list local branches"))
+		}
+
+		localSet := make(map[string]struct{})
+		for _, branch := range local {
+			localSet[branch] = struct{}{}
+			fmt.Fprintln(writer, branch) //nolint:errcheck
+		}
 
 		// Wait for command to finish when done reading
 		defer func() {
@@ -160,6 +168,12 @@ func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, 
 				if after, ok := strings.CutPrefix(branch, "origin/"); ok {
 					branch = after
 				}
+
+				// this should not pose a concurrent access issue as all other writes are done before starting the goroutine.
+				if _, exists := localSet[branch]; exists {
+					continue // Skip local branches
+				}
+
 				fmt.Fprintln(writer, branch) //nolint:errcheck
 			}
 		}
@@ -213,16 +227,16 @@ func ListAllBranches(repoPath string) ([]BranchInfo, error) {
 }
 
 // DoesBranchExist checks if a branch exists (local or remote)
-func DoesBranchExist(repoPath, branch string) (bool, error) {
+func DoesBranchExist(repoPath, branch string) (bool, bool, error) {
 	// Check local branch
 	out, err := exec.Command("git", "-C", repoPath, "branch", "--list", branch).Output()
 	outStr := strings.TrimSpace(string(out))
 	if err != nil {
-		return false, eris.Wrap(err, "failed to check local branch existence")
+		return false, false, eris.Wrap(err, "failed to check local branch existence")
 	} else if outStr != "" {
 		for s := range strings.Lines(outStr) {
 			if strings.TrimSpace(branchListSpecialChars.ReplaceAllString(s, "")) == branch {
-				return true, nil
+				return true, false, nil
 			}
 		}
 	}
@@ -234,20 +248,20 @@ func DoesBranchExist(repoPath, branch string) (bool, error) {
 		repoPath,
 		"fetch",
 		"origin",
-		"refs/heads/"+branch,
+		"origin"+branch+":"+branch,
 	)
 
 	err = cmd.Run()
 	if err == nil {
-		return true, nil
+		return true, true, nil
 	}
 
 	// Check if it's just a ref that doesn't exist or an actual error
 	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
-		return false, nil
+		return false, false, nil
 	}
 
-	return false, nil
+	return false, false, nil
 }
 
 // GetCurrentBranch retrieves the current branch name in a git repository
