@@ -13,12 +13,19 @@ import (
 type Config struct {
 	WorkspaceDir   string `yaml:"workspace_dir"`
 	SessionBackend string `yaml:"session_backend"` // "tmux", "zellij", "screen", "auto"
+	StartupCommand string `yaml:"startup_command"` // Command to run on session creation
 }
 
 // configFile represents the YAML config file structure
 type configFile struct {
 	WorkspaceDir   string `yaml:"workspace_dir"`
 	SessionBackend string `yaml:"session_backend"`
+	StartupCommand string `yaml:"startup_command"`
+}
+
+// ProjectConfig holds project-specific configuration
+type ProjectConfig struct {
+	StartupCommand string `yaml:"startup_command"`
 }
 
 // GetConfigDir returns the OS-specific config directory for sesh
@@ -143,10 +150,59 @@ func LoadConfig() (*Config, error) {
 		return nil, eris.Wrap(err, "failed to get session backend")
 	}
 
+	startupCommand, err := GetStartupCommand("")
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to get startup command")
+	}
+
 	return &Config{
 		WorkspaceDir:   workspaceDir,
 		SessionBackend: sessionBackend,
+		StartupCommand: startupCommand,
 	}, nil
+}
+
+// GetStartupCommand returns the startup command with configuration hierarchy
+// Priority: per-project config > global config > empty string
+func GetStartupCommand(projectPath string) (string, error) {
+	// 1. Check per-project config (highest priority)
+	if projectPath != "" {
+		projectConfig, err := LoadProjectConfig(projectPath)
+		if err == nil && projectConfig.StartupCommand != "" {
+			return projectConfig.StartupCommand, nil
+		}
+	}
+
+	// 2. Check global config
+	config, err := loadConfigFile()
+	if err == nil && config.StartupCommand != "" {
+		return config.StartupCommand, nil
+	}
+
+	// 3. Default to empty (no startup command)
+	return "", nil
+}
+
+// LoadProjectConfig loads project-specific configuration from .sesh.yaml in the project directory
+func LoadProjectConfig(projectPath string) (*ProjectConfig, error) {
+	configPath := filepath.Join(projectPath, ".sesh.yaml")
+
+	// If config file doesn't exist, return empty config (not an error)
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return &ProjectConfig{}, nil
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, eris.Wrapf(err, "failed to read project config file: %s", configPath)
+	}
+
+	var config ProjectConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, eris.Wrapf(err, "failed to parse project config file: %s", configPath)
+	}
+
+	return &config, nil
 }
 
 // loadConfigFile loads the config file from disk (internal helper)

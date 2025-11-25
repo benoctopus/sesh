@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/benoctopus/sesh/internal/config"
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/ui"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
@@ -61,7 +63,8 @@ func runClone(cmd *cobra.Command, args []string) error {
 
 	// Clone repository as bare repo
 	bareRepoPath := filepath.Join(projectPath, ".git")
-	fmt.Printf("Cloning %s to %s...\n", remoteURL, projectPath)
+	fmt.Printf("%s Cloning %s\n", ui.Info("⬇"), ui.Bold(remoteURL))
+	fmt.Printf("  %s %s\n", ui.Faint("→"), projectPath)
 	if err := git.Clone(remoteURL, bareRepoPath); err != nil {
 		return eris.Wrap(err, "failed to clone repository")
 	}
@@ -74,7 +77,7 @@ func runClone(cmd *cobra.Command, args []string) error {
 
 	// Create main worktree
 	worktreePath := workspace.GetWorktreePath(projectPath, defaultBranch)
-	fmt.Printf("Creating worktree for branch %s...\n", defaultBranch)
+	fmt.Printf("%s Creating worktree for branch %s\n", ui.Info("✨"), ui.Bold(defaultBranch))
 	if err := git.CreateWorktree(bareRepoPath, defaultBranch, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to clone worktree")
 	}
@@ -89,15 +92,26 @@ func runClone(cmd *cobra.Command, args []string) error {
 	sessionName := workspace.GenerateSessionName(projectName, defaultBranch)
 
 	// Create session
-	fmt.Printf("Creating %s session %s...\n", sessionMgr.Name(), sessionName)
+	fmt.Printf("%s Creating %s session %s\n", ui.Info("✨"), sessionMgr.Name(), ui.Bold(sessionName))
 	if err := sessionMgr.Create(sessionName, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to create session")
 	}
 
-	fmt.Printf("\nSuccessfully cloned %s\n", projectName)
-	fmt.Printf("Worktree: %s\n", worktreePath)
-	fmt.Printf("Session: %s\n", sessionName)
-	fmt.Printf("\nAttaching to session...\n")
+	fmt.Printf("\n%s Successfully cloned %s\n", ui.Success("✓"), ui.Bold(projectName))
+	fmt.Printf("  %s %s\n", ui.Faint("Worktree:"), worktreePath)
+	fmt.Printf("  %s %s\n", ui.Faint("Session:"), sessionName)
+	fmt.Printf("\n%s Attaching to session...\n", ui.Info("→"))
+
+	// Execute startup command if configured
+	startupCmd, err := config.GetStartupCommand(worktreePath)
+	if err == nil && startupCmd != "" && sessionMgr.Name() == "tmux" {
+		fmt.Printf("%s Running startup command: %s\n", ui.Info("⚙"), ui.Faint(startupCmd))
+		if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
+			if err := tmuxMgr.SendKeys(sessionName, startupCmd); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
+			}
+		}
+	}
 
 	// Attach to the new session
 	if err := sessionMgr.Attach(sessionName); err != nil {

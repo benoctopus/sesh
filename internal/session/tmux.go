@@ -252,3 +252,24 @@ func (t *TmuxManager) Rename(oldName, newName string) error {
 
 	return nil
 }
+
+// SendKeys sends keys/commands to a tmux session
+func (t *TmuxManager) SendKeys(name, command string) error {
+	// Check if session exists
+	exists, err := t.Exists(name)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return eris.Errorf("session '%s' does not exist", name)
+	}
+
+	// Send the command to the session
+	cmd := exec.Command("tmux", "send-keys", "-t", name, command, "C-m")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to send keys to tmux session: %s", string(output))
+	}
+
+	return nil
+}
