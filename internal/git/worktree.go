@@ -66,7 +66,6 @@ func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) 
 		"--set-upstream-to",
 		"origin/"+branch,
 	)
-	// Ignore errors - remote branch might not exist yet
 	// The first push will create it with -u flag
 	_ = cmd.Run()
 
