@@ -57,11 +57,11 @@ This will:
 # Interactive fuzzy search for branches
 sesh switch
 
-# Switch to a specific branch
+# Switch to an existing branch
 sesh switch feature-branch
 
-# Create a new branch and switch to it
-sesh switch -b new-feature
+# Create a new branch automatically (if it doesn't exist)
+sesh switch new-feature
 ```
 
 ### 3. List all sessions
@@ -94,6 +94,8 @@ sesh clone https://github.com/user/repo.git
 
 Switch to a branch, creating a worktree and session if they don't exist.
 
+If the branch doesn't exist locally or remotely, it will be created automatically.
+
 ```bash
 # Interactive fuzzy branch selection
 sesh switch
@@ -101,8 +103,8 @@ sesh switch
 # Switch to existing branch
 sesh switch main
 
-# Create new branch
-sesh switch -b feature-foo
+# Create new branch automatically
+sesh switch feature-foo
 
 # Specify project explicitly
 sesh switch --project myproject feature-bar
