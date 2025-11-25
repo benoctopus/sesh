@@ -10,14 +10,15 @@ import (
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/ui"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 )
 
 var (
-	switchCreateBranch bool
-	switchProjectName  string
+	switchProjectName    string
+	switchStartupCommand string
 )
 
 var switchCmd = &cobra.Command{
@@ -29,20 +30,23 @@ If no branch is specified, an interactive fuzzy finder will show all available b
 The project is automatically detected from the current working directory,
 or can be specified explicitly with the --project flag.
 
+If the branch doesn't exist locally or remotely, a new branch will be created automatically.
+
 Examples:
-  sesh switch feature-foo          # Switch to feature-foo branch
-  sesh switch -b new-feature       # Create new branch and switch
-  sesh switch                      # Interactive fuzzy branch selection
-  sesh switch --project myproject feature-bar  # Explicit project`,
+  sesh switch feature-foo                        # Switch to existing branch
+  sesh switch new-feature                        # Create new branch automatically
+  sesh switch                                    # Interactive fuzzy branch selection
+  sesh switch --project myproject feature-bar    # Explicit project
+  sesh switch -c "direnv allow" feature-baz      # Run startup command`,
 	RunE: runSwitch,
 }
 
 func init() {
 	rootCmd.AddCommand(switchCmd)
 	switchCmd.Flags().
-		BoolVarP(&switchCreateBranch, "create", "b", false, "Create a new branch (like git checkout -b)")
-	switchCmd.Flags().
 		StringVarP(&switchProjectName, "project", "p", "", "Specify project explicitly")
+	switchCmd.Flags().
+		StringVarP(&switchStartupCommand, "command", "c", "", "Command to run after switching to session")
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -100,7 +104,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	existingWorktree, err := state.GetWorktree(proj, branch)
 	if err == nil && existingWorktree != nil {
 		// Worktree exists, attach to existing or create new session
-		fmt.Printf("Switching to existing worktree: %s\n", existingWorktree.Path)
+		fmt.Printf("%s %s\n", ui.Info("→"), ui.Bold(fmt.Sprintf("Switching to existing worktree: %s", existingWorktree.Path)))
 
 		// Generate session name
 		sessionName := workspace.GenerateSessionName(proj.Name, branch)
@@ -117,38 +121,51 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 
 		// Session doesn't exist, create it
-		fmt.Printf("Creating %s session %s...\n", sessionMgr.Name(), sessionName)
+		fmt.Printf("%s Creating %s session %s\n", ui.Info("✨"), sessionMgr.Name(), ui.Bold(sessionName))
 		if err := sessionMgr.Create(sessionName, existingWorktree.Path); err != nil {
 			return eris.Wrap(err, "failed to create session")
+		}
+
+		// Execute startup command if configured
+		startupCmd := getStartupCommand(cfg, existingWorktree.Path)
+		if startupCmd != "" && sessionMgr.Name() == "tmux" {
+			fmt.Printf("%s Running startup command: %s\n", ui.Info("⚙"), ui.Faint(startupCmd))
+			if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
+				if err := tmuxMgr.SendKeys(sessionName, startupCmd); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
+				}
+			}
 		}
 
 		return sessionMgr.Attach(sessionName)
 	}
 
-	var exists bool
-	var remote bool
-
-	// Worktree doesn't exist, create it
-	exists, remote, err = git.DoesBranchExist(proj.LocalPath, branch)
+	// Worktree doesn't exist, check branch existence
+	exists, remote, err := git.DoesBranchExist(proj.LocalPath, branch)
 	if err != nil {
 		return eris.Wrap(err, "failed to check branch existence")
 	}
+
+	// Get worktree path
 	projectPath := workspace.GetProjectPath(cfg.WorkspaceDir, proj.Name)
 	worktreePath := workspace.GetWorktreePath(projectPath, branch)
 
-	// Create worktree
+	// Create worktree based on branch state
 	if remote {
-		// Create new branch from HEAD
-		if err := git.CreateWorktreeFromRef(proj.LocalPath, branch, worktreePath); err != nil {
-			return eris.Wrap(err, "failed to create worktree for new branch")
+		// Branch exists remotely, create worktree from remote
+		fmt.Printf("%s Creating worktree for remote branch: %s\n", ui.Info("✨"), ui.Bold(branch))
+		if err := git.CreateWorktree(proj.LocalPath, branch, worktreePath); err != nil {
+			return eris.Wrap(err, "failed to create worktree from remote branch")
 		}
 	} else if exists {
-		// Create worktree from existing branch
+		// Branch exists locally, create worktree from local
+		fmt.Printf("%s Creating worktree for local branch: %s\n", ui.Info("✨"), ui.Bold(branch))
 		if err := git.CreateWorktree(proj.LocalPath, branch, worktreePath); err != nil {
-			return eris.Wrap(err, "failed to create worktree")
+			return eris.Wrap(err, "failed to create worktree from local branch")
 		}
 	} else {
-		// Create new branch and worktree
+		// Branch doesn't exist, create new branch and worktree
+		fmt.Printf("%s Creating new branch and worktree: %s\n", ui.Success("✨"), ui.Bold(branch))
 		if err := git.CreateWorktreeNewBranch(proj.LocalPath, branch, worktreePath, "HEAD"); err != nil {
 			return eris.Wrap(err, "failed to create worktree with new branch")
 		}
@@ -156,16 +173,48 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 
 	// Create session
 	sessionName := workspace.GenerateSessionName(proj.Name, branch)
-	fmt.Printf("Creating %s session %s...\n", sessionMgr.Name(), sessionName)
+	fmt.Printf("%s Creating %s session %s\n", ui.Info("✨"), sessionMgr.Name(), ui.Bold(sessionName))
 	if err := sessionMgr.Create(sessionName, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to create session")
 	}
 
-	fmt.Printf("\nSuccessfully switched to %s\n", branch)
-	fmt.Printf("Worktree: %s\n", worktreePath)
-	fmt.Printf("Session: %s\n", sessionName)
-	fmt.Printf("\nAttaching to session...\n")
+	fmt.Printf("\n%s Successfully switched to %s\n", ui.Success("✓"), ui.Bold(branch))
+	fmt.Printf("  %s %s\n", ui.Faint("Worktree:"), worktreePath)
+	fmt.Printf("  %s %s\n", ui.Faint("Session:"), sessionName)
+	fmt.Printf("\n%s Attaching to session...\n", ui.Info("→"))
+
+	// Execute startup command if configured
+	startupCmd := getStartupCommand(cfg, worktreePath)
+	if startupCmd != "" && sessionMgr.Name() == "tmux" {
+		fmt.Printf("%s Running startup command: %s\n", ui.Info("⚙"), ui.Faint(startupCmd))
+		if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
+			if err := tmuxMgr.SendKeys(sessionName, startupCmd); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
+			}
+		}
+	}
 
 	// Attach to session
 	return sessionMgr.Attach(sessionName)
+}
+
+// getStartupCommand returns the startup command following the priority hierarchy:
+// 1. Command-line flag (highest priority)
+// 2. Per-project config (.sesh.yaml in worktree)
+// 3. Global config
+// 4. Empty string (no command)
+func getStartupCommand(cfg *config.Config, worktreePath string) string {
+	// 1. Check command-line flag
+	if switchStartupCommand != "" {
+		return switchStartupCommand
+	}
+
+	// 2. Check per-project config
+	startupCmd, err := config.GetStartupCommand(worktreePath)
+	if err == nil && startupCmd != "" {
+		return startupCmd
+	}
+
+	// 3. Return global config (already loaded in cfg)
+	return cfg.StartupCommand
 }

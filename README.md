@@ -1,0 +1,334 @@
+# sesh
+
+A modern git workspace and session manager that seamlessly integrates git worktrees with terminal multiplexers (tmux, zellij, etc.).
+
+## Features
+
+- 🚀 **Fast branch switching** - Instant switching between branches with fuzzy finding
+- 📁 **Git worktree management** - Automatic creation and management of git worktrees
+- 🖥️ **Session management** - Integrated tmux/zellij session management
+- 🎯 **Project auto-detection** - Automatically detects your current project
+- 🔧 **Startup commands** - Run custom commands when creating sessions
+- 🎨 **Beautiful UI** - Colored output and formatted tables
+- ⚡ **Zero configuration** - Works out of the box with sensible defaults
+
+## Why sesh?
+
+Traditional git workflows require constantly switching branches, stashing changes, and managing multiple terminal sessions. **sesh** eliminates this friction by:
+
+1. Using git worktrees to keep each branch in a separate directory
+2. Creating dedicated terminal sessions for each worktree
+3. Providing instant switching between branches with fuzzy finding
+4. Managing everything from a centralized workspace directory
+
+## Installation
+
+### Using Go
+
+```bash
+go install github.com/benoctopus/sesh@latest
+```
+
+### From Source
+
+```bash
+git clone https://github.com/benoctopus/sesh.git
+cd sesh
+go build -o sesh .
+mv sesh /usr/local/bin/
+```
+
+## Quick Start
+
+### 1. Clone a repository
+
+```bash
+sesh clone git@github.com:user/repo.git
+```
+
+This will:
+- Clone the repository as a bare repo in `~/.sesh/github.com/user/repo/`
+- Create a worktree for the default branch
+- Create and attach to a tmux session
+
+### 2. Switch between branches
+
+```bash
+# Interactive fuzzy search for branches
+sesh switch
+
+# Switch to an existing branch
+sesh switch feature-branch
+
+# Create a new branch automatically (if it doesn't exist)
+sesh switch new-feature
+```
+
+### 3. List all sessions
+
+```bash
+# List all sessions
+sesh list
+
+# List only projects
+sesh list --projects
+
+# Output as JSON
+sesh list --json
+```
+
+## Usage
+
+### Commands
+
+#### `sesh clone <remote-url>`
+
+Clone a git repository into the workspace folder.
+
+```bash
+sesh clone git@github.com:user/repo.git
+sesh clone https://github.com/user/repo.git
+```
+
+#### `sesh switch [branch]`
+
+Switch to a branch, creating a worktree and session if they don't exist.
+
+If the branch doesn't exist locally or remotely, it will be created automatically.
+
+```bash
+# Interactive fuzzy branch selection
+sesh switch
+
+# Switch to existing branch
+sesh switch main
+
+# Create new branch automatically
+sesh switch feature-foo
+
+# Specify project explicitly
+sesh switch --project myproject feature-bar
+
+# Run a startup command
+sesh switch -c "direnv allow" feature-baz
+```
+
+#### `sesh list`
+
+List all projects, worktrees, and sessions.
+
+```bash
+# List all sessions (default)
+sesh list
+
+# List only projects
+sesh list --projects
+
+# Output in JSON format
+sesh list --json
+```
+
+#### `sesh delete [branch]`
+
+Delete a worktree and its associated session.
+
+```bash
+# Delete specific worktree
+sesh delete feature-foo
+
+# Delete entire project
+sesh delete --all
+```
+
+#### `sesh status`
+
+Show current session and project information.
+
+```bash
+sesh status
+```
+
+#### `sesh fetch [project]`
+
+Fetch latest changes from remote.
+
+```bash
+# Fetch current project
+sesh fetch
+
+# Fetch specific project
+sesh fetch myproject
+
+# Fetch all projects
+sesh fetch --all
+```
+
+## Configuration
+
+sesh can be configured via a config file or environment variables.
+
+### Config File
+
+Create `~/.config/sesh/config.yaml` (Linux/macOS) or `%APPDATA%\sesh\config.yaml` (Windows):
+
+```yaml
+workspace_dir: ~/Code/workspaces    # Where to store repositories
+session_backend: tmux               # tmux, zellij, screen, or auto
+startup_command: direnv allow       # Command to run on session creation
+```
+
+### Per-Project Configuration
+
+Create `.sesh.yaml` in your project root:
+
+```yaml
+startup_command: |
+  direnv allow
+  npm install
+```
+
+### Environment Variables
+
+```bash
+export SESH_WORKSPACE=~/my-workspace
+export SESH_SESSION_BACKEND=tmux
+```
+
+### Configuration Hierarchy
+
+Configuration is resolved in the following order (highest to lowest priority):
+
+1. **Command-line flags** - `sesh switch -c "command"`
+2. **Per-project config** - `.sesh.yaml` in project root
+3. **Global config** - `~/.config/sesh/config.yaml`
+4. **Environment variables** - `$SESH_WORKSPACE`, `$SESH_SESSION_BACKEND`
+5. **Defaults** - `~/.sesh` workspace, `auto` backend
+
+## Workspace Structure
+
+sesh organizes your projects in a centralized workspace directory:
+
+```
+~/.sesh/
+├── github.com/
+│   └── user/
+│       └── repo/
+│           ├── .git/              # Bare repository
+│           ├── main/              # Main branch worktree
+│           └── feature-foo/       # Feature branch worktree
+└── gitlab.com/
+    └── org/
+        └── project/
+            ├── .git/
+            └── develop/
+```
+
+## Shell Completion
+
+sesh supports shell completion for bash, zsh, fish, and powershell.
+
+### Bash
+
+```bash
+# Load completion for current session
+source <(sesh completion bash)
+
+# Install permanently
+sesh completion bash > /etc/bash_completion.d/sesh
+```
+
+### Zsh
+
+```bash
+# Load completion for current session
+source <(sesh completion zsh)
+
+# Install permanently
+sesh completion zsh > "${fpath[1]}/_sesh"
+```
+
+### Fish
+
+```bash
+sesh completion fish | source
+
+# Install permanently
+sesh completion fish > ~/.config/fish/completions/sesh.fish
+```
+
+## Troubleshooting
+
+### tmux not found
+
+sesh requires tmux (or another session manager) to be installed:
+
+```bash
+# Ubuntu/Debian
+sudo apt install tmux
+
+# macOS
+brew install tmux
+
+# Arch Linux
+sudo pacman -S tmux
+```
+
+### Project not detected
+
+Make sure you're inside a git repository and it has a remote:
+
+```bash
+git remote -v
+```
+
+### Sessions not attaching
+
+Check if tmux is running:
+
+```bash
+tmux ls
+```
+
+## Advanced Usage
+
+### Startup Commands
+
+Run commands automatically when creating sessions:
+
+```bash
+# One-time via flag
+sesh switch -c "direnv allow && npm install" feature-branch
+
+# Per-project via .sesh.yaml
+echo "startup_command: direnv allow" > .sesh.yaml
+
+# Globally via config
+echo "startup_command: direnv allow" >> ~/.config/sesh/config.yaml
+```
+
+### Multiple Session Managers
+
+sesh supports multiple session manager backends:
+
+```yaml
+# config.yaml
+session_backend: tmux  # or: zellij, screen, auto, none
+```
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Related Projects
+
+- [tmux](https://github.com/tmux/tmux) - Terminal multiplexer
+- [git-worktree](https://git-scm.com/docs/git-worktree) - Manage multiple working trees
+- [zellij](https://github.com/zellij-org/zellij) - Modern terminal workspace
+
+## Acknowledgments
+
+Inspired by the need for better git workflow management and the power of git worktrees.

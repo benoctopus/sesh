@@ -19,8 +19,14 @@ managing both git repositories and tmux sessions in a unified way.
 
 Examples:
   sesh list                    # List all sessions
-  sesh attach <name>          # Attach to a session
-  sesh create <name> <path>   # Create new session`,
+  sesh switch <branch>         # Switch to a branch
+  sesh clone <url>             # Clone a repository
+
+Shell Completion:
+  sesh completion bash         # Generate bash completion
+  sesh completion zsh          # Generate zsh completion
+  sesh completion fish         # Generate fish completion
+  sesh completion powershell   # Generate powershell completion`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

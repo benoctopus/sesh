@@ -9,6 +9,7 @@ import (
 	"github.com/benoctopus/sesh/internal/config"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/ui"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
@@ -68,8 +69,8 @@ func listAllProjects(cfg *config.Config) error {
 	}
 
 	if len(projects) == 0 {
-		fmt.Println("No projects found.")
-		fmt.Println("Clone a repository with: sesh clone <remote-url>")
+		fmt.Printf("%s No projects found.\n", ui.Info("ℹ"))
+		fmt.Printf("  %s Clone a repository with: %s\n", ui.Faint("→"), ui.Bold("sesh clone <remote-url>"))
 		return nil
 	}
 
@@ -83,8 +84,9 @@ func listAllProjects(cfg *config.Config) error {
 	}
 
 	// Print table header
-	fmt.Printf("%-50s %-12s %-20s\n", "PROJECT", "WORKTREES", "CREATED")
-	fmt.Println(strings.Repeat("-", 85))
+	fmt.Printf("\n%s\n", ui.Bold("Projects"))
+	fmt.Printf("%-50s %-12s %-20s\n", ui.Faint("PROJECT"), ui.Faint("WORKTREES"), ui.Faint("CREATED"))
+	fmt.Println(strings.Repeat("─", 85))
 
 	for _, proj := range projects {
 		// Get worktree count
@@ -96,12 +98,15 @@ func listAllProjects(cfg *config.Config) error {
 
 		created := formatTimeAgo(proj.CreatedAt)
 
-		fmt.Printf("%-50s %-12d %-20s\n",
+		fmt.Printf("%-50s %s%-12d%s %s\n",
 			truncate(proj.Name, 50),
+			ui.Info(""),
 			len(worktrees),
-			created,
+			ui.Info(""),
+			ui.Faint(created),
 		)
 	}
+	fmt.Println()
 
 	return nil
 }
@@ -168,9 +173,9 @@ func listAllSessions(cfg *config.Config) error {
 	}
 
 	if len(sessions) == 0 {
-		fmt.Println("No worktrees found.")
-		fmt.Println("Clone a repository with: sesh clone <remote-url>")
-		fmt.Println("Or switch to a branch with: sesh switch <branch>")
+		fmt.Printf("%s No worktrees found.\n", ui.Info("ℹ"))
+		fmt.Printf("  %s Clone a repository with: %s\n", ui.Faint("→"), ui.Bold("sesh clone <remote-url>"))
+		fmt.Printf("  %s Or switch to a branch with: %s\n", ui.Faint("→"), ui.Bold("sesh switch <branch>"))
 		return nil
 	}
 
@@ -184,22 +189,27 @@ func listAllSessions(cfg *config.Config) error {
 	}
 
 	// Print table header
-	fmt.Printf("%-30s %-20s %-30s %-10s\n", "PROJECT", "BRANCH", "SESSION NAME", "STATUS")
-	fmt.Println(strings.Repeat("-", 95))
+	fmt.Printf("\n%s\n", ui.Bold("Sessions"))
+	fmt.Printf("%-30s %-20s %-30s %-10s\n", ui.Faint("PROJECT"), ui.Faint("BRANCH"), ui.Faint("SESSION NAME"), ui.Faint("STATUS"))
+	fmt.Println(strings.Repeat("─", 95))
 
 	for _, sess := range sessions {
-		status := "stopped"
+		statusText := ui.Faint("stopped")
+		statusIcon := "○"
 		if sess.IsRunning {
-			status = "running"
+			statusText = ui.Success("running")
+			statusIcon = ui.Success("●")
 		}
 
-		fmt.Printf("%-30s %-20s %-30s %-10s\n",
+		fmt.Printf("%-30s %-20s %-30s %s %s\n",
 			truncate(sess.ProjectName, 30),
-			truncate(sess.Branch, 20),
-			truncate(sess.SessionName, 30),
-			status,
+			ui.Info(truncate(sess.Branch, 20)),
+			ui.Faint(truncate(sess.SessionName, 30)),
+			statusIcon,
+			statusText,
 		)
 	}
+	fmt.Println()
 
 	return nil
 }
