@@ -88,7 +88,6 @@ func CreateWorktreeFromRef(repoPath, ref, worktreePath string) error {
 	return nil
 }
 
-// ListWorktrees lists all worktrees for a repository
 func ListWorktrees(repoPath string) ([]WorktreeInfo, error) {
 	cmd := exec.Command("git", "-C", repoPath, "worktree", "list", "--porcelain")
 	output, err := cmd.Output()
