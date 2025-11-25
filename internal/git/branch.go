@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/rotisserie/eris"
@@ -18,6 +19,8 @@ type BranchInfo struct {
 	IsRemote  bool
 	IsCurrent bool
 }
+
+var branchListSpecialChars = regexp.MustCompile(`[+*]`)
 
 // ListLocalBranches lists all local branches in a repository
 func ListLocalBranches(repoPath string) ([]string, error) {
@@ -61,8 +64,8 @@ func ListRemoteBranches(repoPath string) ([]string, error) {
 				continue
 			}
 			// Remove "origin/" prefix
-			if strings.HasPrefix(branch, "origin/") {
-				result = append(result, strings.TrimPrefix(branch, "origin/"))
+			if trimmed, ok := strings.CutPrefix(branch, "origin/"); ok {
+				result = append(result, trimmed)
 			} else {
 				result = append(result, branch)
 			}
@@ -80,14 +83,15 @@ func ListRemoteBranches(repoPath string) ([]string, error) {
 // The caller must call cleanup() when done to ensure the process terminates
 func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, error) {
 	// Use for-each-ref which works for both bare and normal repos
+
 	cmd := exec.CommandContext(
 		ctx,
 		"git",
 		"-C",
 		repoPath,
-		"for-each-ref",
-		"--format=%(refname:short)",
-		"refs/heads/",
+		"ls-remote",
+		"--branches",
+		"--tags",
 	)
 
 	stdout, err := cmd.StdoutPipe()
@@ -116,8 +120,16 @@ func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, 
 			}
 		}()
 
-		defer writer.Close() //nolint:errcheck
-		defer stdout.Close() //nolint:errcheck
+		local, err := ListLocalBranches(repoPath)
+		if err != nil {
+			cancel(eris.Wrap(err, "failed to list local branches"))
+		}
+
+		localSet := make(map[string]struct{})
+		for _, branch := range local {
+			localSet[branch] = struct{}{}
+			fmt.Fprintln(writer, branch) //nolint:errcheck
+		}
 
 		// Wait for command to finish when done reading
 		defer func() {
@@ -134,17 +146,34 @@ func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, 
 		}()
 
 		scanner := bufio.NewScanner(stdout)
+		skip := true
 		for scanner.Scan() {
 			if ctx.Err() != nil {
 				return // Context cancelled
 			}
 
-			branch := strings.TrimSpace(scanner.Text())
+			if skip {
+				skip = false
+				continue
+			}
+
+			fields := strings.Fields(strings.TrimSpace(scanner.Text()))
+			if len(fields) < 2 {
+				continue
+			}
+
+			branch := strings.TrimPrefix(strings.TrimSpace(fields[1]), "refs/heads/")
 			if branch != "" && !strings.Contains(branch, "HEAD") {
 				// Remove "origin/" prefix if present
 				if after, ok := strings.CutPrefix(branch, "origin/"); ok {
 					branch = after
 				}
+
+				// this should not pose a concurrent access issue as all other writes are done before starting the goroutine.
+				if _, exists := localSet[branch]; exists {
+					continue // Skip local branches
+				}
+
 				fmt.Fprintln(writer, branch) //nolint:errcheck
 			}
 		}
@@ -198,34 +227,41 @@ func ListAllBranches(repoPath string) ([]BranchInfo, error) {
 }
 
 // DoesBranchExist checks if a branch exists (local or remote)
-func DoesBranchExist(repoPath, branch string) (bool, error) {
-	// Check local branch first
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branch)
-	err := cmd.Run()
-	if err == nil {
-		return true, nil
+func DoesBranchExist(repoPath, branch string) (bool, bool, error) {
+	// Check local branch
+	out, err := exec.Command("git", "-C", repoPath, "branch", "--list", branch).Output()
+	outStr := strings.TrimSpace(string(out))
+	if err != nil {
+		return false, false, eris.Wrap(err, "failed to check local branch existence")
+	} else if outStr != "" {
+		for s := range strings.Lines(outStr) {
+			if strings.TrimSpace(branchListSpecialChars.ReplaceAllString(s, "")) == branch {
+				return true, false, nil
+			}
+		}
 	}
 
 	// Check remote branch
-	cmd = exec.Command(
+	cmd := exec.Command(
 		"git",
 		"-C",
 		repoPath,
-		"rev-parse",
-		"--verify",
-		"refs/remotes/origin/"+branch,
+		"fetch",
+		"origin",
+		"origin"+branch+":"+branch,
 	)
+
 	err = cmd.Run()
 	if err == nil {
-		return true, nil
+		return true, true, nil
 	}
 
 	// Check if it's just a ref that doesn't exist or an actual error
 	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
-		return false, nil
+		return false, false, nil
 	}
 
-	return false, nil
+	return false, false, nil
 }
 
 // GetCurrentBranch retrieves the current branch name in a git repository
@@ -240,51 +276,6 @@ func GetCurrentBranch(repoPath string) (string, error) {
 		return "(detached)", nil
 	}
 	return branch, nil
-}
-
-// DoesLocalBranchExist checks if a local branch exists
-func DoesLocalBranchExist(repoPath, branch string) (bool, error) {
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branch)
-	err := cmd.Run()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
-			return false, nil
-		}
-		return false, eris.Wrap(err, "failed to check local branch existence")
-	}
-	return true, nil
-}
-
-// DoesRemoteBranchExist checks if a remote branch exists
-// For bare repositories, branches are at refs/heads/ not refs/remotes/origin/
-func DoesRemoteBranchExist(repoPath, branch string) (bool, error) {
-	// First try refs/heads/ (for bare repos)
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branch)
-	err := cmd.Run()
-	if err == nil {
-		return true, nil
-	}
-
-	// Then try refs/remotes/origin/ (for normal repos)
-	cmd = exec.Command(
-		"git",
-		"-C",
-		repoPath,
-		"rev-parse",
-		"--verify",
-		"refs/remotes/origin/"+branch,
-	)
-	err = cmd.Run()
-	if err == nil {
-		return true, nil
-	}
-
-	// Check if it's just a ref that doesn't exist or an actual error
-	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
-		return false, nil
-	}
-
-	return false, nil
 }
 
 // parseGitBranchList parses the output of git branch commands

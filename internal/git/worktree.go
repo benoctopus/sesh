@@ -19,7 +19,16 @@ type WorktreeInfo struct {
 // If the branch exists remotely, it will be checked out
 // If creating a new branch, use CreateWorktreeNewBranch instead
 func CreateWorktree(repoPath, branch, worktreePath string) error {
-	cmd := exec.Command("git", "-C", repoPath, "worktree", "add", worktreePath, branch)
+	cmd := exec.Command(
+		"git",
+		"-C",
+		repoPath,
+		"worktree",
+		"add",
+		worktreePath,
+		"origin/"+branch,
+		"--track",
+	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return eris.Wrapf(err, "failed to create worktree: %s", string(output))
@@ -30,7 +39,18 @@ func CreateWorktree(repoPath, branch, worktreePath string) error {
 // CreateWorktreeNewBranch creates a new worktree with a new branch
 // This is equivalent to: git worktree add -b <branch> <path> <start-point>
 func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) error {
-	cmd := exec.Command("git", "-C", repoPath, "worktree", "add", "-b", branch, worktreePath, startPoint)
+	cmd := exec.Command(
+		"git",
+		"-C",
+		repoPath,
+		"worktree",
+		"add",
+		"-b",
+		branch,
+		worktreePath,
+		startPoint,
+		"--track",
+	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return eris.Wrapf(err, "failed to create worktree with new branch: %s", string(output))
@@ -40,7 +60,19 @@ func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) 
 
 // CreateWorktreeFromRef creates a new worktree from a specific ref (commit, tag, etc.)
 func CreateWorktreeFromRef(repoPath, ref, worktreePath string) error {
-	cmd := exec.Command("git", "-C", repoPath, "worktree", "add", worktreePath, ref)
+	cmd := exec.Command(
+		"git",
+		"-C",
+		repoPath,
+		"worktree",
+		"add",
+		"--guess-remote",
+		"-b",
+		ref,
+		worktreePath,
+		"origin/"+ref,
+		"--track",
+	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return eris.Wrapf(err, "failed to create worktree from ref: %s", string(output))

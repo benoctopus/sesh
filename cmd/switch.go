@@ -17,8 +17,7 @@ import (
 )
 
 var (
-	switchCreateBranch  bool
-	switchProjectName   string
+	switchProjectName    string
 	switchStartupCommand string
 )
 
@@ -31,18 +30,19 @@ If no branch is specified, an interactive fuzzy finder will show all available b
 The project is automatically detected from the current working directory,
 or can be specified explicitly with the --project flag.
 
+If the branch doesn't exist locally or remotely, a new branch will be created automatically.
+
 Examples:
-  sesh switch feature-foo          # Switch to feature-foo branch
-  sesh switch -b new-feature       # Create new branch and switch
-  sesh switch                      # Interactive fuzzy branch selection
-  sesh switch --project myproject feature-bar  # Explicit project`,
+  sesh switch feature-foo                        # Switch to existing branch
+  sesh switch new-feature                        # Create new branch automatically
+  sesh switch                                    # Interactive fuzzy branch selection
+  sesh switch --project myproject feature-bar    # Explicit project
+  sesh switch -c "direnv allow" feature-baz      # Run startup command`,
 	RunE: runSwitch,
 }
 
 func init() {
 	rootCmd.AddCommand(switchCmd)
-	switchCmd.Flags().
-		BoolVarP(&switchCreateBranch, "create", "b", false, "Create a new branch (like git checkout -b)")
 	switchCmd.Flags().
 		StringVarP(&switchProjectName, "project", "p", "", "Specify project explicitly")
 	switchCmd.Flags().
@@ -140,45 +140,34 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return sessionMgr.Attach(sessionName)
 	}
 
-	// Worktree doesn't exist, create it
-	if switchCreateBranch {
-		// Check if branch already exists
-		exists, err := git.DoesBranchExist(proj.LocalPath, branch)
-		if err != nil {
-			return eris.Wrap(err, "failed to check branch existence")
-		}
-		if exists {
-			return eris.Errorf("branch %s already exists, use without -b to switch to it", branch)
-		}
-
-		fmt.Printf("%s Creating new branch and worktree: %s\n", ui.Success("✨"), ui.Bold(branch))
-	} else {
-		// Check if branch exists remotely
-		exists, err := git.DoesRemoteBranchExist(proj.LocalPath, branch)
-		if err != nil {
-			return eris.Wrap(err, "failed to check remote branch existence")
-		}
-		if !exists {
-			return eris.Errorf("branch %s does not exist remotely, use -b to create it", branch)
-		}
-
-		fmt.Printf("%s Creating worktree for branch: %s\n", ui.Info("✨"), ui.Bold(branch))
+	// Worktree doesn't exist, check branch existence
+	exists, remote, err := git.DoesBranchExist(proj.LocalPath, branch)
+	if err != nil {
+		return eris.Wrap(err, "failed to check branch existence")
 	}
 
 	// Get worktree path
 	projectPath := workspace.GetProjectPath(cfg.WorkspaceDir, proj.Name)
 	worktreePath := workspace.GetWorktreePath(projectPath, branch)
 
-	// Create worktree
-	if switchCreateBranch {
-		// Create new branch from HEAD
-		if err := git.CreateWorktreeFromRef(proj.LocalPath, branch, worktreePath); err != nil {
-			return eris.Wrap(err, "failed to create worktree for new branch")
+	// Create worktree based on branch state
+	if remote {
+		// Branch exists remotely, create worktree from remote
+		fmt.Printf("%s Creating worktree for remote branch: %s\n", ui.Info("✨"), ui.Bold(branch))
+		if err := git.CreateWorktree(proj.LocalPath, branch, worktreePath); err != nil {
+			return eris.Wrap(err, "failed to create worktree from remote branch")
+		}
+	} else if exists {
+		// Branch exists locally, create worktree from local
+		fmt.Printf("%s Creating worktree for local branch: %s\n", ui.Info("✨"), ui.Bold(branch))
+		if err := git.CreateWorktree(proj.LocalPath, branch, worktreePath); err != nil {
+			return eris.Wrap(err, "failed to create worktree from local branch")
 		}
 	} else {
-		// Create worktree from existing branch
-		if err := git.CreateWorktree(proj.LocalPath, branch, worktreePath); err != nil {
-			return eris.Wrap(err, "failed to create worktree")
+		// Branch doesn't exist, create new branch and worktree
+		fmt.Printf("%s Creating new branch and worktree: %s\n", ui.Success("✨"), ui.Bold(branch))
+		if err := git.CreateWorktreeNewBranch(proj.LocalPath, branch, worktreePath, "HEAD"); err != nil {
+			return eris.Wrap(err, "failed to create worktree with new branch")
 		}
 	}
 
