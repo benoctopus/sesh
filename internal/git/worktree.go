@@ -71,7 +71,6 @@ func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) 
 	return nil
 }
 
-// CreateWorktreeFromRef creates a new worktree from a specific ref (commit, tag, etc.)
 func CreateWorktreeFromRef(repoPath, ref, worktreePath string) error {
 	cmd := exec.Command(
 		"git",
@@ -80,11 +79,8 @@ func CreateWorktreeFromRef(repoPath, ref, worktreePath string) error {
 		"worktree",
 		"add",
 		"--guess-remote",
-		"-b",
-		ref,
 		worktreePath,
-		"origin/"+ref,
-		"--track",
+		ref,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
