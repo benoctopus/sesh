@@ -46,7 +46,6 @@ func ResolveProject(workspaceDir, projectName string, cwd string) (*models.Proje
 	return project, nil
 }
 
-
 // DetectProjectFromCWD detects the project name from the current working directory
 // It finds the git repository root and extracts the project name from the remote URL
 func DetectProjectFromCWD(cwd string) (string, error) {

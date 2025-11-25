@@ -67,7 +67,6 @@ func DiscoverProjects(workspaceDir string) ([]*models.Project, error) {
 		// Don't recurse into .git directories
 		return filepath.SkipDir
 	})
-
 	if err != nil {
 		return nil, eris.Wrap(err, "failed to discover projects")
 	}
