@@ -80,14 +80,15 @@ func ListRemoteBranches(repoPath string) ([]string, error) {
 // The caller must call cleanup() when done to ensure the process terminates
 func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, error) {
 	// Use for-each-ref which works for both bare and normal repos
+
 	cmd := exec.CommandContext(
 		ctx,
 		"git",
 		"-C",
 		repoPath,
-		"for-each-ref",
-		"--format=%(refname:short)",
-		"refs/heads/",
+		"ls-remote",
+		"--branches",
+		"--tags",
 	)
 
 	stdout, err := cmd.StdoutPipe()
@@ -134,12 +135,23 @@ func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, 
 		}()
 
 		scanner := bufio.NewScanner(stdout)
+		skip := true
 		for scanner.Scan() {
 			if ctx.Err() != nil {
 				return // Context cancelled
 			}
 
-			branch := strings.TrimSpace(scanner.Text())
+			if skip {
+				skip = false
+				continue
+			}
+
+			fields := strings.Fields(strings.TrimSpace(scanner.Text()))
+			if len(fields) < 2 {
+				continue
+			}
+
+			branch := strings.TrimPrefix(strings.TrimSpace(fields[1]), "refs/heads/")
 			if branch != "" && !strings.Contains(branch, "HEAD") {
 				// Remove "origin/" prefix if present
 				if after, ok := strings.CutPrefix(branch, "origin/"); ok {
