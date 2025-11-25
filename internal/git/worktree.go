@@ -39,6 +39,7 @@ func CreateWorktree(repoPath, branch, worktreePath string) error {
 // CreateWorktreeNewBranch creates a new worktree with a new branch
 // This is equivalent to: git worktree add -b <branch> <path> <start-point>
 func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) error {
+	// Create worktree with new branch
 	cmd := exec.Command(
 		"git",
 		"-C",
@@ -49,12 +50,26 @@ func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) 
 		branch,
 		worktreePath,
 		startPoint,
-		"--track",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return eris.Wrapf(err, "failed to create worktree with new branch: %s", string(output))
 	}
+
+	// Set upstream to origin/<branch> so pulls work correctly
+	// This ensures the branch tracks the remote branch for pull operations
+	cmd = exec.Command(
+		"git",
+		"-C",
+		worktreePath,
+		"branch",
+		"--set-upstream-to",
+		"origin/"+branch,
+	)
+	// Ignore errors - remote branch might not exist yet
+	// The first push will create it with -u flag
+	_ = cmd.Run()
+
 	return nil
 }
 
