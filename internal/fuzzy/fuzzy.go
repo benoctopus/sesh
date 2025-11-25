@@ -3,6 +3,7 @@ package fuzzy
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -47,6 +48,18 @@ func SelectBranchStreaming(producer func(chan<- string) error) (string, error) {
 	}
 
 	return RunFuzzyFinderStreaming(producer, string(finder))
+}
+
+// SelectBranchFromReader presents a fuzzy finder interface with streaming input from a reader
+// The reader should output one item per line
+// This starts fzf immediately and pipes data directly for maximum responsiveness
+func SelectBranchFromReader(reader io.ReadCloser) (string, error) {
+	finder, err := DetectFuzzyFinder()
+	if err != nil {
+		return "", eris.Wrap(err, "fuzzy finder required for streaming selection")
+	}
+
+	return RunFuzzyFinderFromReader(reader, string(finder))
 }
 
 // Select presents a fuzzy finder interface to select an item from a list
@@ -217,6 +230,63 @@ func RunFuzzyFinderStreaming(producer func(chan<- string) error, finder string) 
 	// Check if producer had an error
 	if err := <-producerErr; err != nil {
 		return "", eris.Wrap(err, "failed to produce items")
+	}
+
+	if selected == "" {
+		return "", eris.New("no selection made")
+	}
+
+	return selected, nil
+}
+
+// RunFuzzyFinderFromReader runs a fuzzy finder with input from a reader
+// This pipes data directly from the reader to fzf for maximum performance
+// The reader is closed when the function returns
+func RunFuzzyFinderFromReader(reader io.ReadCloser, finder string) (string, error) {
+	defer reader.Close()
+
+	var cmd *exec.Cmd
+
+	switch Finder(finder) {
+	case FinderFzf:
+		cmd = exec.Command("fzf", "--height", "40%", "--reverse", "--border")
+	case FinderPeco:
+		cmd = exec.Command("peco")
+	default:
+		return "", eris.Errorf("unknown fuzzy finder: %s", finder)
+	}
+
+	// Pipe the reader directly to fzf's stdin
+	cmd.Stdin = reader
+
+	// Capture stdout for the selection
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", eris.Wrap(err, "failed to create stdout pipe")
+	}
+
+	// Set stderr to show errors
+	cmd.Stderr = os.Stderr
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return "", eris.Wrap(err, "failed to start fuzzy finder")
+	}
+
+	// Read the selected item
+	scanner := bufio.NewScanner(stdout)
+	var selected string
+	if scanner.Scan() {
+		selected = strings.TrimSpace(scanner.Text())
+	}
+
+	// Wait for the command to finish
+	if err := cmd.Wait(); err != nil {
+		// User might have cancelled (Ctrl+C)
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 130 {
+			return "", eris.New("selection cancelled")
+		}
+		return "", eris.Wrap(err, "fuzzy finder failed")
 	}
 
 	if selected == "" {

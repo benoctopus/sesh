@@ -2,6 +2,7 @@ package git
 
 import (
 	"bufio"
+	"io"
 	"os/exec"
 	"strings"
 
@@ -62,6 +63,49 @@ func ListRemoteBranches(repoPath string) ([]string, error) {
 
 	// For bare repos, branches are directly under refs/heads/
 	return parseGitBranchList(string(output)), nil
+}
+
+// StreamRemoteBranches returns a reader that streams branch names and the cleanup function
+// The reader will output one branch name per line as git produces them
+// The caller must call cleanup() when done to ensure the process terminates
+func StreamRemoteBranches(repoPath string) (io.ReadCloser, error) {
+	// Use for-each-ref which works for both bare and normal repos
+	cmd := exec.Command("git", "-C", repoPath, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to create stdout pipe")
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, eris.Wrap(err, "failed to start git command")
+	}
+
+	// Create a pipe that will transform the output
+	reader, writer := io.Pipe()
+
+	// Transform output in a goroutine
+	go func() {
+		defer writer.Close()
+		defer stdout.Close()
+
+		// Wait for command to finish when done reading
+		defer cmd.Wait()
+
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			branch := strings.TrimSpace(scanner.Text())
+			if branch != "" && !strings.Contains(branch, "HEAD") {
+				// Remove "origin/" prefix if present
+				if strings.HasPrefix(branch, "origin/") {
+					branch = strings.TrimPrefix(branch, "origin/")
+				}
+				io.WriteString(writer, branch+"\n")
+			}
+		}
+	}()
+
+	return reader, nil
 }
 
 // ListAllBranches lists both local and remote branches
