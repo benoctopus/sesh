@@ -36,6 +36,19 @@ func SelectBranch(branches []string) (string, error) {
 	return RunFuzzyFinder(branches, string(finder))
 }
 
+// SelectBranchStreaming presents a fuzzy finder interface with streaming input
+// The producer function is called to write items to the provided channel
+// This starts fzf immediately for a more responsive interface
+func SelectBranchStreaming(producer func(chan<- string) error) (string, error) {
+	finder, err := DetectFuzzyFinder()
+	if err != nil {
+		// For streaming, we can't easily fall back to prompt since we don't have all items
+		return "", eris.Wrap(err, "fuzzy finder required for streaming selection")
+	}
+
+	return RunFuzzyFinderStreaming(producer, string(finder))
+}
+
 // Select presents a fuzzy finder interface to select an item from a list
 // This is a generic version that can be used for any list of items
 func Select(items []string, prompt string) (string, error) {
@@ -123,6 +136,87 @@ func RunFuzzyFinder(items []string, finder string) (string, error) {
 			return "", eris.New("selection cancelled")
 		}
 		return "", eris.Wrap(err, "fuzzy finder failed")
+	}
+
+	if selected == "" {
+		return "", eris.New("no selection made")
+	}
+
+	return selected, nil
+}
+
+// RunFuzzyFinderStreaming runs a fuzzy finder with streaming input
+// The producer function is called in a goroutine and should send items to the channel
+// This allows fzf to start immediately and display items as they're produced
+func RunFuzzyFinderStreaming(producer func(chan<- string) error, finder string) (string, error) {
+	var cmd *exec.Cmd
+
+	switch Finder(finder) {
+	case FinderFzf:
+		cmd = exec.Command("fzf", "--height", "40%", "--reverse", "--border")
+	case FinderPeco:
+		cmd = exec.Command("peco")
+	default:
+		return "", eris.Errorf("unknown fuzzy finder: %s", finder)
+	}
+
+	// Create pipe to send items to fuzzy finder
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return "", eris.Wrap(err, "failed to create stdin pipe")
+	}
+
+	// Capture stdout for the selection
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", eris.Wrap(err, "failed to create stdout pipe")
+	}
+
+	// Set stderr to show errors
+	cmd.Stderr = os.Stderr
+
+	// Start the command immediately
+	if err := cmd.Start(); err != nil {
+		return "", eris.Wrap(err, "failed to start fuzzy finder")
+	}
+
+	// Create channel for streaming items
+	itemsChan := make(chan string, 100) // Buffer to reduce blocking
+
+	// Start producer in goroutine
+	producerErr := make(chan error, 1)
+	go func() {
+		producerErr <- producer(itemsChan)
+		close(itemsChan)
+	}()
+
+	// Write items to stdin as they arrive
+	go func() {
+		defer stdin.Close()
+		for item := range itemsChan {
+			fmt.Fprintln(stdin, item)
+		}
+	}()
+
+	// Read the output
+	scanner := bufio.NewScanner(stdout)
+	var selected string
+	if scanner.Scan() {
+		selected = strings.TrimSpace(scanner.Text())
+	}
+
+	// Wait for the command to finish
+	if err := cmd.Wait(); err != nil {
+		// User might have cancelled (Ctrl+C)
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 130 {
+			return "", eris.New("selection cancelled")
+		}
+		return "", eris.Wrap(err, "fuzzy finder failed")
+	}
+
+	// Check if producer had an error
+	if err := <-producerErr; err != nil {
+		return "", eris.Wrap(err, "failed to produce items")
 	}
 
 	if selected == "" {

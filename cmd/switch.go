@@ -66,24 +66,34 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		branch = args[0]
 	} else {
-		// No branch specified, use fuzzy finder
+		// No branch specified, use streaming fuzzy finder for better responsiveness
 		fmt.Println("Fetching latest branches...")
-		if err := git.Fetch(proj.LocalPath); err != nil {
-			fmt.Printf("Warning: failed to fetch: %v\n", err)
-		}
 
-		// Get all branches
-		branches, err := git.ListRemoteBranches(proj.LocalPath)
-		if err != nil {
-			return eris.Wrap(err, "failed to list branches")
-		}
+		// Use streaming fuzzy finder - this starts fzf immediately and streams branches as they're discovered
+		selectedBranch, err := fuzzy.SelectBranchStreaming(func(ch chan<- string) error {
+			// Fetch latest changes in background
+			if err := git.Fetch(proj.LocalPath); err != nil {
+				// Don't fail on fetch errors, just use cached branches
+				fmt.Fprintf(os.Stderr, "Warning: failed to fetch: %v\n", err)
+			}
 
-		if len(branches) == 0 {
-			return eris.New("no branches found")
-		}
+			// Get all branches and stream them to the channel
+			branches, err := git.ListRemoteBranches(proj.LocalPath)
+			if err != nil {
+				return eris.Wrap(err, "failed to list branches")
+			}
 
-		// Use fuzzy finder to select branch
-		selectedBranch, err := fuzzy.SelectBranch(branches)
+			if len(branches) == 0 {
+				return eris.New("no branches found")
+			}
+
+			// Send each branch to the channel
+			for _, b := range branches {
+				ch <- b
+			}
+
+			return nil
+		})
 		if err != nil {
 			return eris.Wrap(err, "failed to select branch")
 		}
