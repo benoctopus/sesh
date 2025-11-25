@@ -139,10 +139,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Creating new branch and worktree: %s\n", branch)
 	} else {
 		// Check if branch exists remotely
-		exists, err := git.DoesRemoteBranchExist(proj.LocalPath, branch)
+		exists, err := git.DoesBranchExist(proj.LocalPath, branch)
 		if err != nil {
 			return eris.Wrap(err, "failed to check remote branch existence")
 		}
+
 		if !exists {
 			return eris.Errorf("branch %s does not exist remotely, use -b to create it", branch)
 		}

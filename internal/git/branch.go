@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/rotisserie/eris"
@@ -18,6 +19,8 @@ type BranchInfo struct {
 	IsRemote  bool
 	IsCurrent bool
 }
+
+var branchListSpecialChars = regexp.MustCompile(`[+*]`)
 
 // ListLocalBranches lists all local branches in a repository
 func ListLocalBranches(repoPath string) ([]string, error) {
@@ -211,22 +214,29 @@ func ListAllBranches(repoPath string) ([]BranchInfo, error) {
 
 // DoesBranchExist checks if a branch exists (local or remote)
 func DoesBranchExist(repoPath, branch string) (bool, error) {
-	// Check local branch first
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branch)
-	err := cmd.Run()
-	if err == nil {
-		return true, nil
+	// Check local branch
+	out, err := exec.Command("git", "-C", repoPath, "branch", "--list", branch).Output()
+	outStr := strings.TrimSpace(string(out))
+	if err != nil {
+		return false, eris.Wrap(err, "failed to check local branch existence")
+	} else if outStr != "" {
+		for s := range strings.Lines(outStr) {
+			if strings.TrimSpace(branchListSpecialChars.ReplaceAllString(s, "")) == branch {
+				return true, nil
+			}
+		}
 	}
 
 	// Check remote branch
-	cmd = exec.Command(
+	cmd := exec.Command(
 		"git",
 		"-C",
 		repoPath,
-		"rev-parse",
-		"--verify",
-		"refs/remotes/origin/"+branch,
+		"fetch",
+		"origin",
+		"refs/heads/"+branch,
 	)
+
 	err = cmd.Run()
 	if err == nil {
 		return true, nil
@@ -252,51 +262,6 @@ func GetCurrentBranch(repoPath string) (string, error) {
 		return "(detached)", nil
 	}
 	return branch, nil
-}
-
-// DoesLocalBranchExist checks if a local branch exists
-func DoesLocalBranchExist(repoPath, branch string) (bool, error) {
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branch)
-	err := cmd.Run()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
-			return false, nil
-		}
-		return false, eris.Wrap(err, "failed to check local branch existence")
-	}
-	return true, nil
-}
-
-// DoesRemoteBranchExist checks if a remote branch exists
-// For bare repositories, branches are at refs/heads/ not refs/remotes/origin/
-func DoesRemoteBranchExist(repoPath, branch string) (bool, error) {
-	// First try refs/heads/ (for bare repos)
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branch)
-	err := cmd.Run()
-	if err == nil {
-		return true, nil
-	}
-
-	// Then try refs/remotes/origin/ (for normal repos)
-	cmd = exec.Command(
-		"git",
-		"-C",
-		repoPath,
-		"rev-parse",
-		"--verify",
-		"refs/remotes/origin/"+branch,
-	)
-	err = cmd.Run()
-	if err == nil {
-		return true, nil
-	}
-
-	// Check if it's just a ref that doesn't exist or an actual error
-	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
-		return false, nil
-	}
-
-	return false, nil
 }
 
 // parseGitBranchList parses the output of git branch commands
