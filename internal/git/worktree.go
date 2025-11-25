@@ -57,7 +57,6 @@ func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) 
 	}
 
 	// Set upstream to origin/<branch> so pulls work correctly
-	// This ensures the branch tracks the remote branch for pull operations
 	cmd = exec.Command(
 		"git",
 		"-C",
