@@ -4,7 +4,7 @@ This document provides guidance for AI coding assistants working with the `sesh`
 
 ## Project Overview
 
-**sesh** is a git workspace and tmux session manager written in Go. It helps developers quickly switch between different project contexts by managing both git repositories and tmux sessions in a unified way.
+**sesh** is a modern git workspace and session manager written in Go. It helps developers quickly switch between different project contexts by managing git worktrees and terminal multiplexer sessions (tmux, zellij) in a unified way. The tool uses bare repositories with git worktrees to allow simultaneous work on multiple branches without stashing or switching.
 
 ## Core Technologies
 
@@ -12,8 +12,9 @@ This document provides guidance for AI coding assistants working with the `sesh`
 - **CLI Framework**: [Cobra](https://github.com/spf13/cobra) - for command-line interface. cobra-cli should be used for scaffolding new commands.
 - **Error Handling**: [eris](https://github.com/rotisserie/eris) - for rich error handling with stack traces
 - **Database**: SQLite - for persistent application state
-- **Build System**: Nix flakes - for reproducible development environment
+- **Build System**: Nix flakes - for reproducible development environment and packaging
 - **Task Runner**: go-task (Taskfile) - for common development tasks
+- **Session Backends**: tmux, zellij - terminal multiplexers for session management
 
 ## Project Structure
 
@@ -98,20 +99,29 @@ Keep migrations in `internal/db/migrations/` and use a simple migration system. 
 
 ### Dependencies
 
-External dependencies (non-Go) are managed via `flake.nix`. When adding new external tools:
+External dependencies (non-Go) are managed via `flake.nix`. The development shell includes:
+
+- **Build tools**: go 1.24, go-task, cobra-cli
+- **Code quality**: gopls, golangci-lint, gofumpt, golines
+- **Session managers**: tmux, zellij (for testing and development)
+- **Utilities**: git, fzf, jq, yq, tree, shellcheck
+
+When adding new external tools:
 
 1. Add to the `packages` list in `flake.nix`:
 ```nix
 devShells.default = pkgs.mkShell {
   packages = [
-    pkgs.go_1_25
-    pkgs.tmux          # Add new tools here
-    # ...
+    pkgs.go_1_24
+    pkgs.tmux
+    pkgs.zellij
+    # Add new tools here
   ];
 };
 ```
 
 2. Run `nix flake update` if needed
+3. For runtime dependencies of the built package, update the `postInstall` wrapper in the `packages.default` section
 
 ### Go Dependencies
 
@@ -162,14 +172,21 @@ if err != nil {
 }
 ```
 
-### Tmux Integration
+### Session Manager Integration
 
-Execute tmux commands using `os/exec`:
+The application supports multiple session backends (tmux, zellij). Execute session manager commands using `os/exec`:
 
 ```go
+// Example: tmux
 cmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName)
 if err := cmd.Run(); err != nil {
     return eris.Wrapf(err, "failed to create tmux session %s", sessionName)
+}
+
+// Example: zellij
+cmd := exec.Command("zellij", "attach", sessionName)
+if err := cmd.Run(); err != nil {
+    return eris.Wrapf(err, "failed to attach to zellij session %s", sessionName)
 }
 ```
 
@@ -190,8 +207,20 @@ if err := cmd.Run(); err != nil {
 6. **Use `task` for builds and use as a go tool** - Always use `go tool task build`, `go tool task test`, etc. instead of direct `go` commands
 7. **Binary output to `dist/`** - All built binaries must go to the `dist/` directory
 8. **Keep it simple** - This is a CLI tool, not a web service. Avoid over-engineering.
-9. Leverage existing tools like fzf or peco for interactive selection if needed.
-10. Update this document when new patterns or conventions are established.
+9. **Leverage existing tools** - Use fzf or peco for interactive selection
+10. **Bare repository structure** - All projects use bare repositories with worktrees, not regular clones
+11. **Worktree tracking** - Recent fixes ensure proper upstream tracking for worktree branches
+12. **Multiple session backends** - Support tmux and zellij, with auto-detection capability
+13. **Tree output format** - The list command now outputs in tree format for better visualization
+14. Update this document when new patterns or conventions are established.
+
+## Recent Updates (Context for Development)
+
+- **Nix packaging**: The project is now packaged as a Nix flake and can be installed via `nix profile add`
+- **Worktree improvements**: Fixed upstream tracking and remote branch configuration for bare repositories
+- **Session manager support**: Added zellij support alongside tmux in the development shell
+- **List visualization**: Changed from table format to tree format for better project/worktree hierarchy display
+- **CI integration**: Added Nix flake build checks to GitHub Actions workflow
 
 ## Task Runner
 
