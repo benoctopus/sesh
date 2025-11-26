@@ -17,6 +17,23 @@ func Clone(remoteURL, destPath string) error {
 	if err != nil {
 		return eris.Wrapf(err, "failed to clone repository: %s", string(output))
 	}
+
+	// Configure the bare repo to create remote-tracking branches (refs/remotes/origin/*)
+	// This is necessary for git status to show ahead/behind tracking information in worktrees
+	// By default, bare repos don't have a fetch refspec configured
+	cmd = exec.Command("git", "-C", destPath, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to configure remote fetch: %s", string(output))
+	}
+
+	// Fetch to populate the remote-tracking branches
+	cmd = exec.Command("git", "-C", destPath, "fetch", "origin")
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to fetch remote branches: %s", string(output))
+	}
+
 	return nil
 }
 
