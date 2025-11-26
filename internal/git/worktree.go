@@ -102,6 +102,36 @@ func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) 
 	if err != nil {
 		return eris.Wrapf(err, "failed to create worktree with new branch: %s", string(output))
 	}
+
+	// Set up tracking to origin/<branch>
+	// In bare repos, we need to manually configure the tracking since there are no
+	// remote-tracking branches (refs/remotes/origin/*). We set the config directly.
+	cmd = exec.Command(
+		"git",
+		"-C",
+		worktreePath,
+		"config",
+		"branch."+branch+".remote",
+		"origin",
+	)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to set branch remote: %s", string(output))
+	}
+
+	cmd = exec.Command(
+		"git",
+		"-C",
+		worktreePath,
+		"config",
+		"branch."+branch+".merge",
+		"refs/heads/"+branch,
+	)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to set branch merge: %s", string(output))
+	}
+
 	return nil
 }
 
