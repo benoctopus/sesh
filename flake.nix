@@ -1,3 +1,4 @@
+
 {
   description = "A basic flake with a shell";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -21,8 +22,7 @@
 
           src = ./.;
 
-          vendorHash = null;
-
+          vendorHash = "sha256-XtKA7DrjUeAZDPMFa6Z6dkDLwsAz8N/91yRJoi9yewA=";
           nativeBuildInputs = [ pkgs.makeWrapper ];
 
           postInstall = ''
