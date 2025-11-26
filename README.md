@@ -23,11 +23,34 @@ Traditional git workflows require constantly switching branches, stashing change
 
 ## Installation
 
+### Using Nix (Recommended)
+
+The recommended way to install sesh is via Nix, which automatically handles all dependencies:
+
+```bash
+# Install to your profile
+nix profile add github:benoctopus/sesh
+
+# Or run directly without installing
+nix run github:benoctopus/sesh
+```
+
+The Nix package automatically includes git and fzf as runtime dependencies.
+
 ### Using Go
 
 ```bash
 go install github.com/benoctopus/sesh@latest
 ```
+
+**Note:** When installing via `go install`, you'll need to ensure the following dependencies are installed:
+
+**Required:**
+- Git (version 2.30 or later recommended for worktree support)
+
+**Optional (but recommended):**
+- A terminal multiplexer: `tmux` or `zellij`
+- A fuzzy finder: `fzf` or `peco` (for interactive branch selection)
 
 ### From Source
 
@@ -37,6 +60,8 @@ cd sesh
 go build -o sesh .
 mv sesh /usr/local/bin/
 ```
+
+Same dependency requirements apply as with `go install`.
 
 ## Quick Start
 

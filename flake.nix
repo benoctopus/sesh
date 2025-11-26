@@ -1,6 +1,6 @@
 
 {
-  description = "A basic flake with a shell";
+  description = "A modern git workspace and session manager that integrates git worktrees with terminal multiplexers";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   inputs.systems.url = "github:nix-systems/default";
   inputs.flake-utils = {
@@ -31,10 +31,12 @@
           '';
 
           meta = with pkgs.lib; {
-            description = "A modern git workspace and session manager";
+            description = "A modern git workspace and session manager that integrates git worktrees with terminal multiplexers (tmux, zellij)";
             homepage = "https://github.com/benoctopus/sesh";
             license = licenses.mit;
             mainProgram = "sesh";
+            maintainers = [ ];
+            platforms = platforms.unix;
           };
         };
 
