@@ -25,8 +25,9 @@ var (
 )
 
 var deleteCmd = &cobra.Command{
-	Use:   "delete [branch]",
-	Short: "Delete worktree, session, or entire project",
+	Use:     "delete [branch]",
+	Aliases: []string{"del", "remove", "rm"},
+	Short:   "Delete worktree, session, or entire project",
 	Long: `Delete a worktree and its associated session, or delete an entire project.
 
 By default, deletes the specified branch's worktree and session.
@@ -47,7 +48,8 @@ func init() {
 	rootCmd.AddCommand(deleteCmd)
 	deleteCmd.Flags().BoolVar(&deleteAll, "all", false, "Delete entire project")
 	deleteCmd.Flags().BoolVarP(&deleteForce, "force", "f", false, "Skip confirmation prompt")
-	deleteCmd.Flags().StringVarP(&deleteProjectName, "project", "p", "", "Specify project explicitly")
+	deleteCmd.Flags().
+		StringVarP(&deleteProjectName, "project", "p", "", "Specify project explicitly")
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
@@ -166,7 +168,10 @@ func deleteBranch(cfg *config.Config, proj *models.Project, branch string) error
 
 	if !deleteForce {
 		// Ask for confirmation
-		fmt.Printf("This will delete worktree for branch '%s' and its associated session.\n", branch)
+		fmt.Printf(
+			"This will delete worktree for branch '%s' and its associated session.\n",
+			branch,
+		)
 		fmt.Printf("Worktree path: %s\n", worktree.Path)
 		fmt.Print("Are you sure? (yes/no): ")
 

@@ -20,12 +20,10 @@ var (
 	listJSON     bool
 )
 
-// BUG: Fix list output such that it does not contain an entry with an empty branch, presumably representing
-// the bare project with no checkout.
-
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List projects, worktrees, and sessions",
+	Use:     "list",
+	Aliases: []string{"ls", "status"},
+	Short:   "List projects, worktrees, and sessions",
 	Long: `Display all projects, worktrees, and sessions in the workspace.
 
 By default, shows all sessions with their project and branch information.
@@ -69,7 +67,11 @@ func listAllProjects(cfg *config.Config) error {
 
 	if len(projects) == 0 {
 		fmt.Printf("%s No projects found.\n", ui.Info("ℹ"))
-		fmt.Printf("  %s Clone a repository with: %s\n", ui.Faint("→"), ui.Bold("sesh clone <remote-url>"))
+		fmt.Printf(
+			"  %s Clone a repository with: %s\n",
+			ui.Faint("→"),
+			ui.Bold("sesh clone <remote-url>"),
+		)
 		return nil
 	}
 
@@ -105,10 +107,18 @@ func listAllProjects(cfg *config.Config) error {
 			childPrefix = "    "
 		}
 
-		fmt.Printf("%s %s %s\n",
+		fmt.Printf(
+			"%s %s %s\n",
 			ui.Faint(prefix),
 			ui.Bold(proj.Name),
-			ui.Faint(fmt.Sprintf("(%d worktree%s, created %s)", len(worktrees), pluralize(len(worktrees)), created)),
+			ui.Faint(
+				fmt.Sprintf(
+					"(%d worktree%s, created %s)",
+					len(worktrees),
+					pluralize(len(worktrees)),
+					created,
+				),
+			),
 		)
 
 		// Print worktrees as children
@@ -196,8 +206,16 @@ func listAllSessions(cfg *config.Config) error {
 
 	if len(sessions) == 0 {
 		fmt.Printf("%s No worktrees found.\n", ui.Info("ℹ"))
-		fmt.Printf("  %s Clone a repository with: %s\n", ui.Faint("→"), ui.Bold("sesh clone <remote-url>"))
-		fmt.Printf("  %s Or switch to a branch with: %s\n", ui.Faint("→"), ui.Bold("sesh switch <branch>"))
+		fmt.Printf(
+			"  %s Clone a repository with: %s\n",
+			ui.Faint("→"),
+			ui.Bold("sesh clone <remote-url>"),
+		)
+		fmt.Printf(
+			"  %s Or switch to a branch with: %s\n",
+			ui.Faint("→"),
+			ui.Bold("sesh switch <branch>"),
+		)
 		return nil
 	}
 

@@ -16,8 +16,9 @@ import (
 )
 
 var cloneCmd = &cobra.Command{
-	Use:   "clone <remote-url>",
-	Short: "Clone a git repository into the workspace folder",
+	Use:     "clone <remote-url>",
+	Aliases: []string{"cl"},
+	Short:   "Clone a git repository into the workspace folder",
 	Long: `Clone a git repository into the workspace folder as a bare repo,
 create the main worktree, and set up a session.
 

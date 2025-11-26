@@ -23,8 +23,9 @@ var (
 )
 
 var switchCmd = &cobra.Command{
-	Use:   "switch [branch]",
-	Short: "Switch to a branch (create worktree if needed)",
+	Use:     "switch [-p project] [branch]",
+	Aliases: []string{"sw"},
+	Short:   "Switch to a branch (create worktree if needed)",
 	Long: `Switch to a branch, creating a worktree and session if they don't exist.
 If no branch is specified, an interactive fuzzy finder will show all available branches.
 
@@ -38,7 +39,7 @@ it will be automatically cloned before switching to the branch.
 
 Examples:
   sesh switch feature-foo                                    # Switch to existing branch
-  sesh switch new-feature                                    # Create new branch automatically
+  sesh sw new-feature                                    # Create new branch automatically
   sesh switch                                                # Interactive fuzzy branch selection
   sesh switch --project myproject feature-bar                # Explicit project
   sesh switch -p git@github.com:user/repo.git main           # Auto-clone and switch
@@ -133,7 +134,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	existingWorktree, err := state.GetWorktree(proj, branch)
 	if err == nil && existingWorktree != nil {
 		// Worktree exists, attach to existing or create new session
-		fmt.Printf("%s %s\n", ui.Info("→"), ui.Bold(fmt.Sprintf("Switching to existing worktree: %s", existingWorktree.Path)))
+		fmt.Printf(
+			"%s %s\n",
+			ui.Info("→"),
+			ui.Bold(fmt.Sprintf("Switching to existing worktree: %s", existingWorktree.Path)),
+		)
 
 		// Generate session name
 		sessionName := workspace.GenerateSessionName(proj.Name, branch)
@@ -150,7 +155,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 
 		// Session doesn't exist, create it
-		fmt.Printf("%s Creating %s session %s\n", ui.Info("✨"), sessionMgr.Name(), ui.Bold(sessionName))
+		fmt.Printf(
+			"%s Creating %s session %s\n",
+			ui.Info("✨"),
+			sessionMgr.Name(),
+			ui.Bold(sessionName),
+		)
 		if err := sessionMgr.Create(sessionName, existingWorktree.Path); err != nil {
 			return eris.Wrap(err, "failed to create session")
 		}

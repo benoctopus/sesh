@@ -19,8 +19,9 @@ var (
 )
 
 var fetchCmd = &cobra.Command{
-	Use:   "fetch [project]",
-	Short: "Fetch latest changes from remote for a project",
+	Use:     "fetch [project]",
+	Aliases: []string{"fc"},
+	Short:   "Fetch latest changes from remote for a project",
 	Long: `Fetch the latest changes from the remote repository for a project.
 
 By default, fetches changes for the current project (detected from working directory).
