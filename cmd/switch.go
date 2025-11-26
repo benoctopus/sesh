@@ -2,13 +2,16 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
 	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/fuzzy"
 	"github.com/benoctopus/sesh/internal/git"
+	"github.com/benoctopus/sesh/internal/pr"
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
@@ -21,14 +24,16 @@ import (
 var (
 	switchProjectName    string
 	switchStartupCommand string
+	switchPR             bool
 )
 
 var switchCmd = &cobra.Command{
 	Use:     "switch [-p project] [branch]",
 	Aliases: []string{"sw"},
-	Short:   "Switch to a branch (create worktree if needed)",
-	Long: `Switch to a branch, creating a worktree and session if they don't exist.
+	Short:   "Switch to a branch or pull request (create worktree if needed)",
+	Long: `Switch to a branch or pull request, creating a worktree and session if they don't exist.
 If no branch is specified, an interactive fuzzy finder will show all available branches.
+Use --pr to select from open pull requests instead.
 
 The project is automatically detected from the current working directory,
 or can be specified explicitly with the --project flag.
@@ -40,8 +45,9 @@ it will be automatically cloned before switching to the branch.
 
 Examples:
   sesh switch feature-foo                                    # Switch to existing branch
-  sesh sw new-feature                                    # Create new branch automatically
+  sesh sw new-feature                                        # Create new branch automatically
   sesh switch                                                # Interactive fuzzy branch selection
+  sesh switch --pr                                           # Interactive PR selection
   sesh switch --project myproject feature-bar                # Explicit project
   sesh switch -p git@github.com:user/repo.git main           # Auto-clone and switch
   sesh switch -p https://github.com/user/repo.git feature    # Auto-clone HTTPS URL
@@ -55,6 +61,8 @@ func init() {
 		StringVarP(&switchProjectName, "project", "p", "", "Specify project explicitly")
 	switchCmd.Flags().
 		StringVarP(&switchStartupCommand, "command", "c", "", "Command to run after switching to session")
+	switchCmd.Flags().
+		BoolVar(&switchPR, "pr", false, "Select from open pull requests")
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -102,7 +110,73 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	}
 
 	var branch string
-	if len(args) > 0 {
+
+	// Handle PR selection if --pr flag is set
+	if switchPR {
+		disp := display.NewStderr()
+
+		if len(args) > 0 {
+			return eris.New("cannot specify branch name with --pr flag")
+		}
+
+		// Get remote URL
+		remoteURL, err := git.GetRemoteURL(proj.LocalPath)
+		if err != nil {
+			return eris.Wrap(err, "failed to get remote URL")
+		}
+
+		// Create PR provider
+		provider, err := pr.NewProvider(remoteURL)
+		if err != nil {
+			return eris.Wrap(err, "failed to create PR provider")
+		}
+
+		// Check if gh CLI is installed and authenticated (for GitHub)
+		if provider.Name() == "github" {
+			if err := pr.CheckGHCLI(); err != nil {
+				return err
+			}
+		}
+
+		// List open PRs
+		prs, err := provider.ListOpenPRs(cmd.Context(), proj.LocalPath)
+		if err != nil {
+			return eris.Wrap(err, "failed to list pull requests")
+		}
+
+		if len(prs) == 0 {
+			return eris.New("no open pull requests found")
+		}
+
+		// Format PRs for fuzzy finder
+		prChoices := make([]string, len(prs))
+		for i, pullRequest := range prs {
+			prChoices[i] = pr.FormatPRForFuzzyFinder(pullRequest)
+		}
+
+		// Create reader from PR choices for fuzzy finder
+		prReader := io.NopCloser(strings.NewReader(strings.Join(prChoices, "\n")))
+
+		// Use fuzzy finder to select PR
+		selectedPR, err := fuzzy.SelectBranchFromReader(prReader)
+		if err != nil {
+			return eris.Wrap(err, "failed to select pull request")
+		}
+
+		// Parse PR number from selection
+		prNum, err := pr.ParsePRNumber(selectedPR)
+		if err != nil {
+			return eris.Wrap(err, "failed to parse PR number")
+		}
+
+		// Get the branch for this PR
+		branch, err = provider.GetPRBranch(cmd.Context(), proj.LocalPath, prNum)
+		if err != nil {
+			return eris.Wrap(err, "failed to get PR branch")
+		}
+
+		disp.Printf("%s Switching to PR #%d branch: %s\n", disp.InfoText("→"), prNum, disp.Bold(branch))
+	} else if len(args) > 0 {
 		branch = args[0]
 	} else {
 		// No branch specified

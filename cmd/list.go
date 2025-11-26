@@ -1,12 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/benoctopus/sesh/internal/config"
 	"github.com/benoctopus/sesh/internal/display"
+	"github.com/benoctopus/sesh/internal/git"
+	"github.com/benoctopus/sesh/internal/pr"
+	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
 	"github.com/benoctopus/sesh/internal/workspace"
@@ -17,14 +23,15 @@ import (
 var (
 	listProjects bool
 	listSessions bool
+	listPRs      bool
 	listJSON     bool
 )
 
 var listCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls", "status"},
-	Short:   "List projects, worktrees, and sessions",
-	Long: `Display all projects, worktrees, and sessions in the workspace.
+	Short:   "List projects, worktrees, sessions, or pull requests",
+	Long: `Display all projects, worktrees, sessions, or pull requests.
 
 By default, shows all sessions with their project and branch information.
 
@@ -32,6 +39,7 @@ Examples:
   sesh list                    # List all sessions
   sesh list --projects         # List only projects
   sesh list --sessions         # List only sessions
+  sesh list --pr               # List open pull requests
   sesh list --json             # Output in JSON format`,
 	RunE: runList,
 }
@@ -40,6 +48,7 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 	listCmd.Flags().BoolVar(&listProjects, "projects", false, "Show only projects")
 	listCmd.Flags().BoolVar(&listSessions, "sessions", false, "Show only sessions (default)")
+	listCmd.Flags().BoolVar(&listPRs, "pr", false, "Show open pull requests")
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output in JSON format")
 }
 
@@ -52,6 +61,10 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	if listProjects {
 		return listAllProjects(cfg)
+	}
+
+	if listPRs {
+		return listAllPRs(cmd.Context(), cfg)
 	}
 
 	// Default: list sessions
@@ -356,4 +369,106 @@ func pluralize(count int) string {
 		return ""
 	}
 	return "s"
+}
+
+// listAllPRs lists all open pull requests for the current project
+func listAllPRs(ctx context.Context, cfg *config.Config) error {
+	disp := display.NewStderr()
+
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return eris.Wrap(err, "failed to get current working directory")
+	}
+
+	// Resolve project from current directory
+	proj, err := project.ResolveProject(cfg.WorkspaceDir, "", cwd)
+	if err != nil {
+		return eris.Wrap(err, "failed to resolve project from current directory")
+	}
+
+	// Get remote URL
+	remoteURL, err := git.GetRemoteURL(proj.LocalPath)
+	if err != nil {
+		return eris.Wrap(err, "failed to get remote URL")
+	}
+
+	// Create PR provider
+	provider, err := pr.NewProvider(remoteURL)
+	if err != nil {
+		return eris.Wrap(err, "failed to create PR provider")
+	}
+
+	// Check if gh CLI is installed and authenticated (for GitHub)
+	if provider.Name() == "github" {
+		if err := pr.CheckGHCLI(); err != nil {
+			return err
+		}
+	}
+
+	// List open PRs
+	prs, err := provider.ListOpenPRs(ctx, proj.LocalPath)
+	if err != nil {
+		return eris.Wrap(err, "failed to list pull requests")
+	}
+
+	if len(prs) == 0 {
+		disp.Info("No open pull requests found.")
+		return nil
+	}
+
+	if listJSON {
+		data, err := json.MarshalIndent(prs, "", "  ")
+		if err != nil {
+			return eris.Wrap(err, "failed to marshal PRs to JSON")
+		}
+		// JSON output is pipeable, so use stdout
+		fmt.Println(string(data))
+		return nil
+	}
+
+	// Print tree header
+	disp.Printf("\n%s\n", disp.Bold(fmt.Sprintf("Open Pull Requests (%s)", proj.Name)))
+	disp.Println()
+
+	for i, pullRequest := range prs {
+		isLast := i == len(prs)-1
+		prefix := "├──"
+		if isLast {
+			prefix = "└──"
+		}
+
+		// Format PR info
+		prNum := disp.InfoText(fmt.Sprintf("#%d", pullRequest.Number))
+		title := disp.Bold(pullRequest.Title)
+		branch := disp.Faint(fmt.Sprintf("(%s → %s)", pullRequest.Branch, pullRequest.BaseBranch))
+		author := disp.Faint(fmt.Sprintf("@%s", pullRequest.Author))
+		updated := disp.Faint(fmt.Sprintf("updated %s", formatTimeAgo(pullRequest.UpdatedAt)))
+
+		disp.Printf("%s %s %s %s %s %s\n",
+			disp.Faint(prefix),
+			prNum,
+			title,
+			branch,
+			author,
+			updated,
+		)
+
+		// Print labels if any
+		if len(pullRequest.Labels) > 0 {
+			childPrefix := "    "
+			if !isLast {
+				childPrefix = "│   "
+			}
+			labelStr := strings.Join(pullRequest.Labels, ", ")
+			disp.Printf("%s%s %s\n",
+				disp.Faint(childPrefix),
+				disp.Faint("└──"),
+				disp.Faint(fmt.Sprintf("Labels: %s", labelStr)),
+			)
+		}
+	}
+	disp.Println()
+
+	return nil
 }
