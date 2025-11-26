@@ -261,3 +261,169 @@ func TestLoadConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestGetFuzzyFinder(t *testing.T) {
+	// Save and restore original environment
+	originalEnv := os.Getenv("SESH_FUZZY_FINDER")
+	defer func() {
+		if originalEnv != "" {
+			os.Setenv("SESH_FUZZY_FINDER", originalEnv)
+		} else {
+			os.Unsetenv("SESH_FUZZY_FINDER")
+		}
+	}()
+
+	t.Run("with environment variable", func(t *testing.T) {
+		os.Setenv("SESH_FUZZY_FINDER", "fzf")
+
+		finder, err := GetFuzzyFinder()
+		if err != nil {
+			t.Fatalf("GetFuzzyFinder() returned error: %v", err)
+		}
+
+		if finder != "fzf" {
+			t.Errorf("GetFuzzyFinder() = %q, want %q", finder, "fzf")
+		}
+	})
+
+	t.Run("default finder", func(t *testing.T) {
+		os.Unsetenv("SESH_FUZZY_FINDER")
+
+		finder, err := GetFuzzyFinder()
+		if err != nil {
+			t.Fatalf("GetFuzzyFinder() returned error: %v", err)
+		}
+
+		if finder != "auto" {
+			t.Errorf("GetFuzzyFinder() = %q, want %q", finder, "auto")
+		}
+	})
+}
+
+func TestValidateConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  configFile
+		wantErr bool
+	}{
+		{
+			name: "valid config with all fields",
+			config: configFile{
+				Version:        "1",
+				WorkspaceDir:   "~/projects",
+				SessionBackend: "tmux",
+				FuzzyFinder:    "fzf",
+				StartupCommand: "echo hello",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid config with auto values",
+			config: configFile{
+				Version:        "1",
+				WorkspaceDir:   "~/.sesh",
+				SessionBackend: "auto",
+				FuzzyFinder:    "auto",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid fuzzy finder",
+			config: configFile{
+				Version:     "1",
+				FuzzyFinder: "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid session backend",
+			config: configFile{
+				Version:        "1",
+				SessionBackend: "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid empty config",
+			config: configFile{
+				Version: "1",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateConfig(&tt.config)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateConfig() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSaveAndLoadConfig(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir := t.TempDir()
+
+	// Set XDG_CONFIG_HOME to temp directory
+	originalXDG := os.Getenv("XDG_CONFIG_HOME")
+	os.Setenv("XDG_CONFIG_HOME", tempDir)
+	defer func() {
+		if originalXDG != "" {
+			os.Setenv("XDG_CONFIG_HOME", originalXDG)
+		} else {
+			os.Unsetenv("XDG_CONFIG_HOME")
+		}
+	}()
+
+	// Create test config
+	testConfig := &Config{
+		WorkspaceDir:   "~/test-projects",
+		SessionBackend: "tmux",
+		FuzzyFinder:    "fzf",
+		StartupCommand: "echo test",
+	}
+
+	// Save config
+	err := SaveConfig(testConfig)
+	if err != nil {
+		t.Fatalf("SaveConfig() returned error: %v", err)
+	}
+
+	// Verify file exists
+	configPath, err := GetConfigPath()
+	if err != nil {
+		t.Fatalf("GetConfigPath() returned error: %v", err)
+	}
+
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		t.Fatalf("Config file was not created at: %s", configPath)
+	}
+
+	// Load and verify config
+	loadedConfig, err := loadConfigFile()
+	if err != nil {
+		t.Fatalf("loadConfigFile() returned error: %v", err)
+	}
+
+	if loadedConfig.Version != CurrentConfigVersion {
+		t.Errorf("Version = %q, want %q", loadedConfig.Version, CurrentConfigVersion)
+	}
+
+	if loadedConfig.WorkspaceDir != testConfig.WorkspaceDir {
+		t.Errorf("WorkspaceDir = %q, want %q", loadedConfig.WorkspaceDir, testConfig.WorkspaceDir)
+	}
+
+	if loadedConfig.SessionBackend != testConfig.SessionBackend {
+		t.Errorf("SessionBackend = %q, want %q", loadedConfig.SessionBackend, testConfig.SessionBackend)
+	}
+
+	if loadedConfig.FuzzyFinder != testConfig.FuzzyFinder {
+		t.Errorf("FuzzyFinder = %q, want %q", loadedConfig.FuzzyFinder, testConfig.FuzzyFinder)
+	}
+
+	if loadedConfig.StartupCommand != testConfig.StartupCommand {
+		t.Errorf("StartupCommand = %q, want %q", loadedConfig.StartupCommand, testConfig.StartupCommand)
+	}
+}
