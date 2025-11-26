@@ -18,7 +18,7 @@
       {
         packages.default = pkgs.buildGoModule {
           pname = "sesh";
-          version = "0.1.0";
+          version = "0.1.1";
 
           src = ./.;
 
@@ -53,6 +53,8 @@
           pkgs.cobra-cli
           pkgs.tree
           pkgs.fzf
+          pkgs.tmux
+          pkgs.zellij
         ]; };
       }
     );
