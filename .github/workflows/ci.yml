@@ -97,3 +97,23 @@ jobs:
             gofmt -l .
             exit 1
           fi
+
+  nix-build:
+    name: Nix Flake Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v14
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Check flake
+        run: nix flake check
+
+      - name: Build package
+        run: nix build
