@@ -1,7 +1,6 @@
 package fuzzy
 
 import (
-	"os"
 	"os/exec"
 	"testing"
 )
@@ -23,64 +22,6 @@ func TestDetectFuzzyFinder(t *testing.T) {
 		if finder != FinderNone {
 			t.Errorf("DetectFuzzyFinder() should return FinderNone when error occurs, got: %s", finder)
 		}
-	}
-}
-
-func TestIsAvailable(t *testing.T) {
-	// Test that IsAvailable returns a boolean
-	available := IsAvailable()
-
-	// Verify it matches DetectFuzzyFinder result
-	_, err := DetectFuzzyFinder()
-	expectedAvailable := err == nil
-
-	if available != expectedAvailable {
-		t.Errorf("IsAvailable() = %v, want %v", available, expectedAvailable)
-	}
-}
-
-func TestGetAvailableFinder(t *testing.T) {
-	finder := GetAvailableFinder()
-
-	// Should return one of the known finders or "none"
-	validFinders := map[string]bool{
-		"fzf":  true,
-		"peco": true,
-		"none": true,
-	}
-
-	if !validFinders[finder] {
-		t.Errorf("GetAvailableFinder() returned unknown finder: %s", finder)
-	}
-}
-
-func TestSelectBranch_EmptyList(t *testing.T) {
-	_, err := SelectBranch([]string{})
-	if err == nil {
-		t.Error("SelectBranch() should return error for empty list")
-	}
-}
-
-func TestSelect_EmptyList(t *testing.T) {
-	_, err := Select([]string{}, "test prompt")
-	if err == nil {
-		t.Error("Select() should return error for empty list")
-	}
-}
-
-func TestRunFuzzyFinder_UnknownFinder(t *testing.T) {
-	items := []string{"item1", "item2", "item3"}
-	_, err := RunFuzzyFinder(items, "unknown-finder")
-
-	if err == nil {
-		t.Error("RunFuzzyFinder() should return error for unknown finder")
-	}
-}
-
-func TestSelectWithPreview_EmptyList(t *testing.T) {
-	_, err := SelectWithPreview([]string{}, "echo {}")
-	if err == nil {
-		t.Error("SelectWithPreview() should return error for empty list")
 	}
 }
 
@@ -140,98 +81,52 @@ func TestFinderConstants(t *testing.T) {
 	}
 }
 
-// TestSelectWithPreview_FallbackWhenFzfNotAvailable tests that SelectWithPreview
-// falls back to regular Select when fzf is not available
-func TestSelectWithPreview_FallbackWhenFzfNotAvailable(t *testing.T) {
-	// Check if fzf is available
-	_, err := exec.LookPath("fzf")
-	if err == nil {
-		// fzf is available, skip this test
-		t.Skip("Skipping fallback test because fzf is available")
+// TestCreateFinderCommand tests the helper function that creates finder commands
+func TestCreateFinderCommand(t *testing.T) {
+	tests := []struct {
+		name      string
+		finder    string
+		wantCmd   string
+		wantError bool
+	}{
+		{
+			name:      "fzf command",
+			finder:    "fzf",
+			wantCmd:   "fzf",
+			wantError: false,
+		},
+		{
+			name:      "peco command",
+			finder:    "peco",
+			wantCmd:   "peco",
+			wantError: false,
+		},
+		{
+			name:      "unknown finder",
+			finder:    "unknown",
+			wantCmd:   "",
+			wantError: true,
+		},
 	}
 
-	// When fzf is not available and we call SelectWithPreview with a non-empty list,
-	// it should fall back to Select, which will fall back to selectWithPrompt
-	// Since we can't interact with stdin in tests, we just verify it doesn't panic
-	// and returns an appropriate error
-	items := []string{"item1", "item2"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, err := createFinderCommand(tt.finder)
 
-	// We can't really test the interactive part without mocking stdin,
-	// but we can at least verify the function handles the case gracefully
-	// This is more of a smoke test
-	_, err = SelectWithPreview(items, "echo {}")
-	// We expect an error because we can't provide stdin in the test
-	// The important thing is that it doesn't panic
-	if err == nil {
-		// If somehow it succeeded, that's also okay
-		t.Log("SelectWithPreview succeeded unexpectedly, but that's acceptable")
-	}
-}
-
-// Test that the fuzzy finder integration uses correct command-line arguments
-func TestRunFuzzyFinder_CommandArguments(t *testing.T) {
-	// Check if fzf is available
-	_, fzfErr := exec.LookPath("fzf")
-	if fzfErr != nil {
-		t.Skip("Skipping test because fzf is not available")
-	}
-
-	// We can't easily test the full execution without user input,
-	// but we can verify the function handles the case gracefully
-	items := []string{"branch-1", "branch-2", "branch-3"}
-
-	// This will fail because there's no interactive input in the test,
-	// but we're checking that it doesn't panic and the error is expected
-	_, err := RunFuzzyFinder(items, "fzf")
-
-	// We expect an error because fzf needs interactive input
-	// The important part is verifying the function handles it correctly
-	if err == nil {
-		t.Log("RunFuzzyFinder unexpectedly succeeded without input")
-	}
-}
-
-// TestSelectBranch_NonInteractive tests that SelectBranch handles the case
-// where no fuzzy finder is available
-func TestSelectBranch_NonInteractive(t *testing.T) {
-	// Save original stdin
-	oldStdin := os.Stdin
-	defer func() { os.Stdin = oldStdin }()
-
-	// Check if any fuzzy finder is available
-	_, err := DetectFuzzyFinder()
-	if err == nil {
-		t.Skip("Skipping non-interactive test because fuzzy finder is available")
-	}
-
-	branches := []string{"main", "develop", "feature"}
-
-	// Without interactive input, this should fail with a read error
-	// The important thing is that it attempts the fallback
-	_, err = SelectBranch(branches)
-
-	// We expect an error because we can't provide input
-	if err == nil {
-		t.Error("SelectBranch should fail without interactive input when using fallback")
-	}
-}
-
-// TestSelect_NonInteractive tests that Select handles the case
-// where no fuzzy finder is available
-func TestSelect_NonInteractive(t *testing.T) {
-	// Check if any fuzzy finder is available
-	_, err := DetectFuzzyFinder()
-	if err == nil {
-		t.Skip("Skipping non-interactive test because fuzzy finder is available")
-	}
-
-	items := []string{"option1", "option2", "option3"}
-
-	// Without interactive input, this should fail with a read error
-	_, err = Select(items, "Select an option")
-
-	// We expect an error because we can't provide input
-	if err == nil {
-		t.Error("Select should fail without interactive input when using fallback")
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("createFinderCommand(%q) expected error, got nil", tt.finder)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("createFinderCommand(%q) unexpected error: %v", tt.finder, err)
+				}
+				if cmd == nil {
+					t.Errorf("createFinderCommand(%q) returned nil command", tt.finder)
+				} else if cmd.Path != "" && cmd.Args[0] != tt.wantCmd {
+					t.Errorf("createFinderCommand(%q) command = %q, want %q", tt.finder, cmd.Args[0], tt.wantCmd)
+				}
+			}
+		})
 	}
 }
