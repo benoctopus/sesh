@@ -106,28 +106,28 @@ func Fetch(repoPath string) error {
 }
 
 // GetDefaultBranch retrieves the default branch name from a repository
+// For bare repositories (which sesh uses), this checks the symbolic ref HEAD
 func GetDefaultBranch(repoPath string) (string, error) {
-	// Query the symbolic ref for the remote HEAD
-	cmd := exec.Command("git", "-C", repoPath, "symbolic-ref", "refs/remotes/origin/HEAD")
+	// In bare repos, HEAD points directly to refs/heads/<branch>
+	cmd := exec.Command("git", "-C", repoPath, "symbolic-ref", "HEAD")
 	output, err := cmd.Output()
-	if err != nil {
-		// Fallback: try to detect from common branch names
-		for _, branch := range []string{"main", "master", "develop"} {
-			if exists, _ := doesRefExist(repoPath, fmt.Sprintf("refs/remotes/origin/%s", branch)); exists {
-				return branch, nil
-			}
+	if err == nil {
+		// Parse the ref (e.g., "refs/heads/main" -> "main")
+		ref := strings.TrimSpace(string(output))
+		parts := strings.Split(ref, "/")
+		if len(parts) >= 3 {
+			return parts[len(parts)-1], nil
 		}
-		return "", eris.Wrap(err, "failed to determine default branch")
 	}
 
-	// Parse the ref (e.g., "refs/remotes/origin/main" -> "main")
-	ref := strings.TrimSpace(string(output))
-	parts := strings.Split(ref, "/")
-	if len(parts) < 1 {
-		return "", eris.Errorf("invalid default branch ref: %s", ref)
+	// Fallback: try to detect from common branch names at refs/heads/*
+	for _, branch := range []string{"main", "master", "develop"} {
+		if exists, _ := doesRefExist(repoPath, fmt.Sprintf("refs/heads/%s", branch)); exists {
+			return branch, nil
+		}
 	}
 
-	return parts[len(parts)-1], nil
+	return "", eris.New("failed to determine default branch")
 }
 
 // doesRefExist checks if a git ref exists in the repository
