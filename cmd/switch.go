@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/benoctopus/sesh/internal/config"
 	"github.com/benoctopus/sesh/internal/fuzzy"
@@ -32,12 +33,17 @@ or can be specified explicitly with the --project flag.
 
 If the branch doesn't exist locally or remotely, a new branch will be created automatically.
 
+If a git URL is provided for the --project flag and the repository has not been cloned yet,
+it will be automatically cloned before switching to the branch.
+
 Examples:
-  sesh switch feature-foo                        # Switch to existing branch
-  sesh switch new-feature                        # Create new branch automatically
-  sesh switch                                    # Interactive fuzzy branch selection
-  sesh switch --project myproject feature-bar    # Explicit project
-  sesh switch -c "direnv allow" feature-baz      # Run startup command`,
+  sesh switch feature-foo                                    # Switch to existing branch
+  sesh switch new-feature                                    # Create new branch automatically
+  sesh switch                                                # Interactive fuzzy branch selection
+  sesh switch --project myproject feature-bar                # Explicit project
+  sesh switch -p git@github.com:user/repo.git main           # Auto-clone and switch
+  sesh switch -p https://github.com/user/repo.git feature    # Auto-clone HTTPS URL
+  sesh switch -c "direnv allow" feature-baz                  # Run startup command`,
 	RunE: runSwitch,
 }
 
@@ -60,6 +66,29 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return eris.Wrap(err, "failed to get current working directory")
+	}
+
+	// Handle auto-clone if a git URL is provided
+	if switchProjectName != "" && git.IsGitURL(switchProjectName) {
+		remoteURL := switchProjectName
+
+		// Generate project name from the URL
+		projectName, err := git.GenerateProjectName(remoteURL)
+		if err != nil {
+			return eris.Wrap(err, "failed to generate project name from remote URL")
+		}
+
+		// Check if project already exists
+		existingProject, err := state.GetProject(cfg.WorkspaceDir, projectName)
+		if err != nil || existingProject == nil {
+			// Project doesn't exist, clone it
+			if err := cloneRepository(cfg, remoteURL, projectName); err != nil {
+				return eris.Wrap(err, "failed to clone repository")
+			}
+		}
+
+		// Update switchProjectName to use the generated project name
+		switchProjectName = projectName
 	}
 
 	// Resolve project from filesystem state
@@ -217,4 +246,41 @@ func getStartupCommand(cfg *config.Config, worktreePath string) string {
 
 	// 3. Return global config (already loaded in cfg)
 	return cfg.StartupCommand
+}
+
+// cloneRepository clones a repository into the workspace
+// This is used when auto-cloning a repository specified by git URL
+func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
+	// Ensure workspace directory exists
+	if err := config.EnsureWorkspaceDir(); err != nil {
+		return eris.Wrap(err, "failed to ensure workspace directory")
+	}
+
+	// Get project path in workspace
+	projectPath := workspace.GetProjectPath(cfg.WorkspaceDir, projectName)
+
+	// Clone repository as bare repo
+	bareRepoPath := filepath.Join(projectPath, ".git")
+	fmt.Printf("%s Cloning %s\n", ui.Info("⬇"), ui.Bold(remoteURL))
+	fmt.Printf("  %s %s\n", ui.Faint("→"), projectPath)
+	if err := git.Clone(remoteURL, bareRepoPath); err != nil {
+		return eris.Wrap(err, "failed to clone repository")
+	}
+
+	// Get default branch
+	defaultBranch, err := git.GetDefaultBranch(bareRepoPath)
+	if err != nil {
+		return eris.Wrap(err, "failed to get default branch")
+	}
+
+	// Create main worktree
+	worktreePath := workspace.GetWorktreePath(projectPath, defaultBranch)
+	fmt.Printf("%s Creating worktree for branch %s\n", ui.Info("✨"), ui.Bold(defaultBranch))
+	if err := git.CreateWorktree(bareRepoPath, defaultBranch, worktreePath); err != nil {
+		return eris.Wrap(err, "failed to create worktree")
+	}
+
+	fmt.Printf("%s Successfully cloned %s\n", ui.Success("✓"), ui.Bold(projectName))
+
+	return nil
 }
