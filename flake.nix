@@ -53,6 +53,8 @@
           pkgs.cobra-cli
           pkgs.tree
           pkgs.fzf
+          pkgs.tmux
+          pkgs.zellij
         ]; };
       }
     );
