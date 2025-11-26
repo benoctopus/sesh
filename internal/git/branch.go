@@ -226,42 +226,38 @@ func ListAllBranches(repoPath string) ([]BranchInfo, error) {
 	return result, nil
 }
 
-// DoesBranchExist checks if a branch exists (local or remote)
+// DoesBranchExist checks if a branch exists in the repository
+// For bare repositories (which sesh uses), all branches are at refs/heads/*
+// Returns (exists, isRemote, error) - isRemote is always false for bare repos
 func DoesBranchExist(repoPath, branch string) (bool, bool, error) {
-	// Check local branch
-	out, err := exec.Command("git", "-C", repoPath, "branch", "--list", branch).Output()
-	outStr := strings.TrimSpace(string(out))
-	if err != nil {
-		return false, false, eris.Wrap(err, "failed to check local branch existence")
-	} else if outStr != "" {
-		for s := range strings.Lines(outStr) {
-			if strings.TrimSpace(branchListSpecialChars.ReplaceAllString(s, "")) == branch {
-				return true, false, nil
-			}
-		}
-	}
-
-	// Check remote branch
+	// Check if branch exists at refs/heads/<branch>
+	// This works for both bare repos and regular repos with local branches
 	cmd := exec.Command(
 		"git",
 		"-C",
 		repoPath,
-		"fetch",
-		"origin",
-		"origin"+branch+":"+branch,
+		"show-ref",
+		"--verify",
+		"--quiet",
+		"refs/heads/"+branch,
 	)
 
-	err = cmd.Run()
+	err := cmd.Run()
 	if err == nil {
-		return true, true, nil
+		// Branch exists at refs/heads/<branch>
+		return true, false, nil
 	}
 
-	// Check if it's just a ref that doesn't exist or an actual error
-	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
-		return false, false, nil
+	// Check if it's a non-existent ref (exit code 1) or an actual error
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		if exitErr.ExitCode() == 1 {
+			// Branch doesn't exist
+			return false, false, nil
+		}
 	}
 
-	return false, false, nil
+	// Some other error occurred
+	return false, false, eris.Wrap(err, "failed to check branch existence")
 }
 
 // GetCurrentBranch retrieves the current branch name in a git repository

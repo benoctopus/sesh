@@ -170,7 +170,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Worktree doesn't exist, check branch existence
-	exists, remote, err := git.DoesBranchExist(proj.LocalPath, branch)
+	exists, _, err := git.DoesBranchExist(proj.LocalPath, branch)
 	if err != nil {
 		return eris.Wrap(err, "failed to check branch existence")
 	}
@@ -180,17 +180,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	worktreePath := workspace.GetWorktreePath(projectPath, branch)
 
 	// Create worktree based on branch state
-	if remote {
-		// Branch exists remotely, create worktree from remote
-		fmt.Printf("%s Creating worktree for remote branch: %s\n", ui.Info("✨"), ui.Bold(branch))
+	if exists {
+		// Branch exists, create worktree from it
+		// In bare repos (which sesh uses), this automatically sets up tracking to origin
+		fmt.Printf("%s Creating worktree for branch: %s\n", ui.Info("✨"), ui.Bold(branch))
 		if err := git.CreateWorktree(proj.LocalPath, branch, worktreePath); err != nil {
-			return eris.Wrap(err, "failed to create worktree from remote branch")
-		}
-	} else if exists {
-		// Branch exists locally, create worktree from local
-		fmt.Printf("%s Creating worktree for local branch: %s\n", ui.Info("✨"), ui.Bold(branch))
-		if err := git.CreateWorktree(proj.LocalPath, branch, worktreePath); err != nil {
-			return eris.Wrap(err, "failed to create worktree from local branch")
+			return eris.Wrap(err, "failed to create worktree from branch")
 		}
 	} else {
 		// Branch doesn't exist, create new branch and worktree
