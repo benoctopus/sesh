@@ -111,15 +111,6 @@ func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, 
 		ctx, cancel := context.WithCancelCause(ctx)
 		defer cancel(nil)
 
-		defer func() {
-			if err := writer.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error closing writer: %v\n", err)
-			}
-			if err := stdout.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error closing stdout: %v\n", err)
-			}
-		}()
-
 		local, err := ListLocalBranches(repoPath)
 		if err != nil {
 			cancel(eris.Wrap(err, "failed to list local branches"))
@@ -133,6 +124,9 @@ func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, 
 
 		// Wait for command to finish when done reading
 		defer func() {
+			defer writer.Close()
+			defer stdout.Close()
+
 			var err error
 			defer cancel(err)
 

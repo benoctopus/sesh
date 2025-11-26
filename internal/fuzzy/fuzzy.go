@@ -2,7 +2,6 @@ package fuzzy
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -21,6 +20,9 @@ const (
 	FinderPeco Finder = "peco"
 	FinderNone Finder = "none"
 )
+
+// TODO: consolidate repetitive code in this file
+// TODO: remove dead code in this file
 
 // SelectBranch presents a fuzzy finder interface to select a branch from a list
 // Returns the selected branch name or an error
@@ -113,6 +115,7 @@ func RunFuzzyFinder(items []string, finder string) (string, error) {
 	if err != nil {
 		return "", eris.Wrap(err, "failed to create stdin pipe")
 	}
+	defer stdin.Close()
 
 	// Capture stdout for the selection
 	stdout, err := cmd.StdoutPipe()
@@ -130,7 +133,6 @@ func RunFuzzyFinder(items []string, finder string) (string, error) {
 
 	// Write items to stdin in a goroutine
 	go func() {
-		defer stdin.Close()
 		for _, item := range items {
 			fmt.Fprintln(stdin, item)
 		}
@@ -244,7 +246,7 @@ func RunFuzzyFinderStreaming(producer func(chan<- string) error, finder string) 
 // This pipes data directly from the reader to fzf for maximum performance
 // The reader is closed when the function returns
 func RunFuzzyFinderFromReader(reader io.ReadCloser, finder string) (string, error) {
-	defer reader.Close()
+	defer reader.Close() //nolint:errcheck
 
 	var cmd *exec.Cmd
 
@@ -259,24 +261,13 @@ func RunFuzzyFinderFromReader(reader io.ReadCloser, finder string) (string, erro
 
 	// Pipe the reader directly to fzf's stdin
 	cmd.Stdin = reader
-	cmd.Stdout = bytes.NewBuffer(nil)
 	cmd.Stderr = os.Stderr
 
-	// Start the command
-	if err := cmd.Start(); err != nil {
-		return "", eris.Wrap(err, "failed to start fuzzy finder")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", eris.Wrap(err, "failed to get fuzzy finder output")
 	}
-
-	// Wait for the command to finish
-	if err := cmd.Wait(); err != nil {
-		// User might have cancelled (Ctrl+C)
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 130 {
-			return "", eris.New("selection cancelled")
-		}
-		return "", eris.Wrap(err, "fuzzy finder failed")
-	}
-
-	selected := strings.TrimSpace(cmd.Stdout.(*bytes.Buffer).String())
+	selected := strings.TrimSpace(string(out))
 	if selected == "" {
 		return "", eris.New("no selection made")
 	}
