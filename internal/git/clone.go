@@ -105,6 +105,13 @@ func GenerateProjectName(remoteURL string) (string, error) {
 	return filepath.Join(host, org, repo), nil
 }
 
+// IsGitURL checks if a string is a valid git URL (SSH or HTTPS format)
+func IsGitURL(str string) bool {
+	// Try to parse as git URL
+	_, _, _, err := ParseRemoteURL(str)
+	return err == nil
+}
+
 // Fetch fetches the latest changes from the remote repository
 func Fetch(repoPath string) error {
 	cmd := exec.Command("git", "-C", repoPath, "fetch", "origin")
