@@ -15,10 +15,11 @@ type WorktreeInfo struct {
 	Commit string
 }
 
-// CreateWorktree creates a new worktree for a specific branch
-// If the branch exists remotely, it will be checked out
-// If creating a new branch, use CreateWorktreeNewBranch instead
+// CreateWorktree creates a new worktree for a branch that exists in the repository
+// For bare repositories (which sesh uses), branches are stored at refs/heads/<branch>
+// This sets up tracking to origin/<branch> for pushing
 func CreateWorktree(repoPath, branch, worktreePath string) error {
+	// Create the worktree
 	cmd := exec.Command(
 		"git",
 		"-C",
@@ -26,12 +27,59 @@ func CreateWorktree(repoPath, branch, worktreePath string) error {
 		"worktree",
 		"add",
 		worktreePath,
-		"origin/"+branch,
-		"--track",
+		branch,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return eris.Wrapf(err, "failed to create worktree: %s", string(output))
+	}
+
+	// Set up tracking to origin/<branch>
+	// In bare repos, we need to manually configure the tracking since there are no
+	// remote-tracking branches (refs/remotes/origin/*). We set the config directly.
+	cmd = exec.Command(
+		"git",
+		"-C",
+		worktreePath,
+		"config",
+		"branch."+branch+".remote",
+		"origin",
+	)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to set branch remote: %s", string(output))
+	}
+
+	cmd = exec.Command(
+		"git",
+		"-C",
+		worktreePath,
+		"config",
+		"branch."+branch+".merge",
+		"refs/heads/"+branch,
+	)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to set branch merge: %s", string(output))
+	}
+
+	return nil
+}
+
+// CreateWorktreeFromLocalBranch creates a new worktree for a branch that already exists locally
+func CreateWorktreeFromLocalBranch(repoPath, branch, worktreePath string) error {
+	cmd := exec.Command(
+		"git",
+		"-C",
+		repoPath,
+		"worktree",
+		"add",
+		worktreePath,
+		branch,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to create worktree from local branch: %s", string(output))
 	}
 	return nil
 }
@@ -49,7 +97,6 @@ func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) 
 		branch,
 		worktreePath,
 		startPoint,
-		"--track",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
