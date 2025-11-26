@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/benoctopus/sesh/internal/tty"
 	"github.com/rotisserie/eris"
 )
 
@@ -25,6 +26,10 @@ const (
 // SelectBranch presents a fuzzy finder interface to select a branch from a list
 // Returns the selected branch name or an error
 func SelectBranch(branches []string) (string, error) {
+	if !tty.IsInteractive() {
+		return "", eris.New("interactive selection not available in noninteractive mode")
+	}
+
 	if len(branches) == 0 {
 		return "", eris.New("no branches available to select")
 	}
@@ -42,6 +47,10 @@ func SelectBranch(branches []string) (string, error) {
 // The producer function is called to write items to the provided channel
 // This starts fzf immediately for a more responsive interface
 func SelectBranchStreaming(producer func(chan<- string) error) (string, error) {
+	if !tty.IsInteractive() {
+		return "", eris.New("interactive selection not available in noninteractive mode")
+	}
+
 	finder, err := DetectFuzzyFinder()
 	if err != nil {
 		// For streaming, we can't easily fall back to prompt since we don't have all items
@@ -55,6 +64,11 @@ func SelectBranchStreaming(producer func(chan<- string) error) (string, error) {
 // The reader should output one item per line
 // This starts fzf immediately and pipes data directly for maximum responsiveness
 func SelectBranchFromReader(reader io.ReadCloser) (string, error) {
+	if !tty.IsInteractive() {
+		reader.Close()
+		return "", eris.New("interactive selection not available in noninteractive mode")
+	}
+
 	finder, err := DetectFuzzyFinder()
 	if err != nil {
 		return "", eris.Wrap(err, "fuzzy finder required for streaming selection")
@@ -66,6 +80,10 @@ func SelectBranchFromReader(reader io.ReadCloser) (string, error) {
 // Select presents a fuzzy finder interface to select an item from a list
 // This is a generic version that can be used for any list of items
 func Select(items []string, prompt string) (string, error) {
+	if !tty.IsInteractive() {
+		return "", eris.New("interactive selection not available in noninteractive mode")
+	}
+
 	if len(items) == 0 {
 		return "", eris.New("no items available to select")
 	}
@@ -287,6 +305,10 @@ func RunFuzzyFinderFromReader(reader io.ReadCloser, finder string) (string, erro
 // selectWithPrompt is a fallback selection method when no fuzzy finder is available
 // It displays a numbered list and prompts the user to select by number
 func selectWithPrompt(items []string) (string, error) {
+	if !tty.IsInteractive() {
+		return "", eris.New("interactive selection not available in noninteractive mode")
+	}
+
 	// Display numbered list
 	fmt.Println("Select an option:")
 	for i, item := range items {
@@ -334,6 +356,10 @@ func GetAvailableFinder() string {
 // SelectWithPreview presents a fuzzy finder with preview support (fzf only)
 // The preview command will be executed for each item, with {} replaced by the item
 func SelectWithPreview(items []string, previewCmd string) (string, error) {
+	if !tty.IsInteractive() {
+		return "", eris.New("interactive selection not available in noninteractive mode")
+	}
+
 	if len(items) == 0 {
 		return "", eris.New("no items available to select")
 	}
