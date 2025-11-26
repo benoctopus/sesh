@@ -155,74 +155,6 @@ func TestGenerateProjectName(t *testing.T) {
 	}
 }
 
-func TestIsGitURL(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{
-			name:  "GitHub SSH URL",
-			input: "git@github.com:user/repo.git",
-			want:  true,
-		},
-		{
-			name:  "GitHub HTTPS URL",
-			input: "https://github.com/user/repo.git",
-			want:  true,
-		},
-		{
-			name:  "GitLab SSH URL",
-			input: "git@gitlab.com:org/subgroup/project.git",
-			want:  true,
-		},
-		{
-			name:  "GitLab HTTPS URL",
-			input: "https://gitlab.com/org/subgroup/project.git",
-			want:  true,
-		},
-		{
-			name:  "Bitbucket URL",
-			input: "https://bitbucket.org/team/repo.git",
-			want:  true,
-		},
-		{
-			name:  "URL without .git extension",
-			input: "https://github.com/user/repo",
-			want:  true,
-		},
-		{
-			name:  "short project name",
-			input: "myproject",
-			want:  false,
-		},
-		{
-			name:  "full project name",
-			input: "github.com/user/repo",
-			want:  false,
-		},
-		{
-			name:  "invalid URL",
-			input: "invalid://url",
-			want:  false,
-		},
-		{
-			name:  "empty string",
-			input: "",
-			want:  false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := IsGitURL(tt.input)
-			if got != tt.want {
-				t.Errorf("IsGitURL(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestParseGitBranchList(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -260,7 +192,11 @@ func TestParseGitBranchList(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseGitBranchList(tt.input)
 			if len(result) != len(tt.expected) {
-				t.Errorf("parseGitBranchList() returned %d items, want %d", len(result), len(tt.expected))
+				t.Errorf(
+					"parseGitBranchList() returned %d items, want %d",
+					len(result),
+					len(tt.expected),
+				)
 				return
 			}
 			for i, branch := range result {

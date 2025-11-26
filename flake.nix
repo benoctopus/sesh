@@ -18,7 +18,7 @@
       {
         packages.default = pkgs.buildGoModule {
           pname = "sesh";
-          version = "0.1.4";
+          version = "0.1.5";
 
           src = ./.;
 
