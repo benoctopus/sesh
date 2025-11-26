@@ -18,7 +18,7 @@
       {
         packages.default = pkgs.buildGoModule {
           pname = "sesh";
-          version = "0.1.2";
+          version = "0.1.3";
 
           src = ./.;
 
@@ -41,6 +41,7 @@
         devShells.default = pkgs.mkShell { packages = [
           pkgs.git
           pkgs.go_1_24
+          pkgs.ranger
           pkgs.go-task
           pkgs.gopls
           pkgs.golines
