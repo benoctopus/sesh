@@ -188,19 +188,42 @@ sesh fetch myproject
 sesh fetch --all
 ```
 
+#### `sesh edit`
+
+Open the sesh configuration file in your default editor (determined by `$VISUAL` or `$EDITOR`).
+
+The configuration is validated after editing, and you'll be prompted to fix any errors before saving.
+
+```bash
+sesh edit
+```
+
 ## Configuration
 
 sesh can be configured via a config file or environment variables.
 
 ### Config File
 
-Create `~/.config/sesh/config.yaml` (Linux/macOS) or `%APPDATA%\sesh\config.yaml` (Windows):
+The config file is located at:
+- **Linux/macOS**: `~/.config/sesh/config.yaml`
+- **Windows**: `%APPDATA%\sesh\config.yaml`
+
+You can edit it manually or use `sesh edit` to open it in your default editor with validation.
 
 ```yaml
+version: "1"                        # Config file version (for backwards compatibility)
 workspace_dir: ~/Code/workspaces    # Where to store repositories
 session_backend: tmux               # tmux, zellij, screen, or auto
+fuzzy_finder: fzf                   # fzf, peco, or auto
 startup_command: direnv allow       # Command to run on session creation
 ```
+
+**Available Options:**
+- `version`: Config file format version (currently "1")
+- `workspace_dir`: Directory where repositories are stored (supports `~` expansion)
+- `session_backend`: Session manager to use (`tmux`, `zellij`, `screen`, or `auto` to detect)
+- `fuzzy_finder`: Fuzzy finder for branch selection (`fzf`, `peco`, or `auto` to detect)
+- `startup_command`: Command to run when creating new sessions
 
 ### Per-Project Configuration
 
@@ -217,6 +240,7 @@ startup_command: |
 ```bash
 export SESH_WORKSPACE=~/my-workspace
 export SESH_SESSION_BACKEND=tmux
+export SESH_FUZZY_FINDER=fzf
 ```
 
 ### Configuration Hierarchy
@@ -225,9 +249,9 @@ Configuration is resolved in the following order (highest to lowest priority):
 
 1. **Command-line flags** - `sesh switch -c "command"`
 2. **Per-project config** - `.sesh.yaml` in project root
-3. **Global config** - `~/.config/sesh/config.yaml`
-4. **Environment variables** - `$SESH_WORKSPACE`, `$SESH_SESSION_BACKEND`
-5. **Defaults** - `~/.sesh` workspace, `auto` backend
+3. **Environment variables** - `$SESH_WORKSPACE`, `$SESH_SESSION_BACKEND`, `$SESH_FUZZY_FINDER`
+4. **Global config** - `~/.config/sesh/config.yaml`
+5. **Defaults** - `~/.sesh` workspace, `auto` backend, `auto` fuzzy finder
 
 ## Workspace Structure
 

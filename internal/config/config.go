@@ -14,14 +14,22 @@ type Config struct {
 	WorkspaceDir   string `yaml:"workspace_dir"`
 	SessionBackend string `yaml:"session_backend"` // "tmux", "zellij", "screen", "auto"
 	StartupCommand string `yaml:"startup_command"` // Command to run on session creation
+	FuzzyFinder    string `yaml:"fuzzy_finder"`    // "fzf", "peco", "auto"
 }
 
 // configFile represents the YAML config file structure
 type configFile struct {
+	Version        string `yaml:"version"`
 	WorkspaceDir   string `yaml:"workspace_dir"`
 	SessionBackend string `yaml:"session_backend"`
 	StartupCommand string `yaml:"startup_command"`
+	FuzzyFinder    string `yaml:"fuzzy_finder"`
 }
+
+const (
+	// CurrentConfigVersion is the current version of the config file format
+	CurrentConfigVersion = "1"
+)
 
 // ProjectConfig holds project-specific configuration
 type ProjectConfig struct {
@@ -100,6 +108,23 @@ func GetSessionBackend() (string, error) {
 	return "auto", nil
 }
 
+// GetFuzzyFinder returns the fuzzy finder with configuration hierarchy
+func GetFuzzyFinder() (string, error) {
+	// 1. Environment variable (highest priority)
+	if envFinder := os.Getenv("SESH_FUZZY_FINDER"); envFinder != "" {
+		return envFinder, nil
+	}
+
+	// 2. Config file
+	config, err := loadConfigFile()
+	if err == nil && config.FuzzyFinder != "" {
+		return config.FuzzyFinder, nil
+	}
+
+	// 3. Auto-detect (default)
+	return "auto", nil
+}
+
 // GetDBPath returns the full path to the SQLite database
 func GetDBPath() (string, error) {
 	configDir, err := GetConfigDir()
@@ -155,10 +180,16 @@ func LoadConfig() (*Config, error) {
 		return nil, eris.Wrap(err, "failed to get startup command")
 	}
 
+	fuzzyFinder, err := GetFuzzyFinder()
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to get fuzzy finder")
+	}
+
 	return &Config{
 		WorkspaceDir:   workspaceDir,
 		SessionBackend: sessionBackend,
 		StartupCommand: startupCommand,
+		FuzzyFinder:    fuzzyFinder,
 	}, nil
 }
 
@@ -252,4 +283,113 @@ func expandHome(path string) (string, error) {
 	}
 
 	return path, nil
+}
+
+// GetConfigPath returns the full path to the config file
+func GetConfigPath() (string, error) {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return "", eris.Wrap(err, "failed to get config directory")
+	}
+
+	return filepath.Join(configDir, "config.yaml"), nil
+}
+
+// SaveConfig saves the configuration to disk
+func SaveConfig(config *Config) error {
+	configPath, err := GetConfigPath()
+	if err != nil {
+		return eris.Wrap(err, "failed to get config path")
+	}
+
+	// Ensure config directory exists
+	if err := EnsureConfigDir(); err != nil {
+		return eris.Wrap(err, "failed to ensure config directory")
+	}
+
+	// Convert to configFile structure with version
+	cf := configFile{
+		Version:        CurrentConfigVersion,
+		WorkspaceDir:   config.WorkspaceDir,
+		SessionBackend: config.SessionBackend,
+		StartupCommand: config.StartupCommand,
+		FuzzyFinder:    config.FuzzyFinder,
+	}
+
+	// Marshal to YAML
+	data, err := yaml.Marshal(&cf)
+	if err != nil {
+		return eris.Wrap(err, "failed to marshal config to YAML")
+	}
+
+	// Write to file
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		return eris.Wrapf(err, "failed to write config file: %s", configPath)
+	}
+
+	return nil
+}
+
+// ValidateConfig validates the configuration settings
+func ValidateConfig(config *configFile) error {
+	// Validate fuzzy finder
+	if config.FuzzyFinder != "" && config.FuzzyFinder != "auto" {
+		validFinders := []string{"fzf", "peco"}
+		valid := false
+		for _, finder := range validFinders {
+			if config.FuzzyFinder == finder {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return eris.Errorf("invalid fuzzy_finder: %s (must be one of: auto, fzf, peco)", config.FuzzyFinder)
+		}
+	}
+
+	// Validate session backend
+	if config.SessionBackend != "" && config.SessionBackend != "auto" {
+		validBackends := []string{"tmux", "zellij", "screen"}
+		valid := false
+		for _, backend := range validBackends {
+			if config.SessionBackend == backend {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return eris.Errorf("invalid session_backend: %s (must be one of: auto, tmux, zellij, screen)", config.SessionBackend)
+		}
+	}
+
+	// Validate workspace directory (if provided, it should be expandable)
+	if config.WorkspaceDir != "" {
+		_, err := expandHome(config.WorkspaceDir)
+		if err != nil {
+			return eris.Wrap(err, "invalid workspace_dir")
+		}
+	}
+
+	return nil
+}
+
+// ValidateConfigFile validates a config file at the given path
+func ValidateConfigFile(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return eris.Wrapf(err, "failed to read config file: %s", configPath)
+	}
+
+	var config configFile
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return eris.Wrapf(err, "failed to parse config file: %s", configPath)
+	}
+
+	// Validate version (for future compatibility)
+	if config.Version != "" && config.Version != CurrentConfigVersion {
+		// In the future, we can handle migrations here
+		// For now, we'll just warn but not fail
+	}
+
+	return ValidateConfig(&config)
 }

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/benoctopus/sesh/internal/config"
 	"github.com/rotisserie/eris"
 )
 
@@ -32,14 +33,24 @@ func SelectBranchFromReader(reader io.ReadCloser) (string, error) {
 }
 
 // DetectFuzzyFinder detects which fuzzy finder is available on the system
-// Checks in order: fzf, peco
+// Checks config first, then auto-detects in order: fzf, peco
 func DetectFuzzyFinder() (Finder, error) {
-	// Check for fzf
+	// 1. Check config for user preference
+	configuredFinder, err := config.GetFuzzyFinder()
+	if err == nil && configuredFinder != "" && configuredFinder != "auto" {
+		// Verify the configured finder is actually available
+		if _, err := exec.LookPath(configuredFinder); err == nil {
+			return Finder(configuredFinder), nil
+		}
+		// If configured finder not found, fall back to auto-detect
+	}
+
+	// 2. Auto-detect: Check for fzf
 	if _, err := exec.LookPath("fzf"); err == nil {
 		return FinderFzf, nil
 	}
 
-	// Check for peco
+	// 3. Auto-detect: Check for peco
 	if _, err := exec.LookPath("peco"); err == nil {
 		return FinderPeco, nil
 	}
