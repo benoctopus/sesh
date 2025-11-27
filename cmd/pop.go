@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/benoctopus/sesh/internal/config"
 	"github.com/benoctopus/sesh/internal/db"
+	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/session"
-	"github.com/benoctopus/sesh/internal/ui"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 )
@@ -90,10 +88,11 @@ func runPop(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display info about where we're switching to
-	fmt.Printf(
+	disp := display.NewStderr()
+	disp.Printf(
 		"%s Switching to previous session: %s (%s - %s)\n",
-		ui.Info("→"),
-		ui.Bold(previousSession.SessionName),
+		disp.InfoText("→"),
+		disp.Bold(previousSession.SessionName),
 		previousSession.ProjectName,
 		previousSession.Branch,
 	)

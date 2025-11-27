@@ -9,7 +9,6 @@ import (
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/models"
 	"github.com/benoctopus/sesh/internal/session"
-	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 )
 
@@ -205,58 +204,4 @@ func GetWorktreeByPath(workspaceDir, path string) (*models.Worktree, error) {
 	}
 
 	return nil, eris.Errorf("worktree not found at path: %s", path)
-}
-
-// SessionExists checks if a session exists with the given name
-func SessionExists(sessionMgr session.SessionManager, sessionName string) (bool, error) {
-	return sessionMgr.Exists(sessionName)
-}
-
-// MatchSessionToWorktree attempts to match a session name to a worktree
-// Returns the worktree if found, nil otherwise
-func MatchSessionToWorktree(workspaceDir, sessionName string) (*models.Worktree, error) {
-	// Parse session name to get repo and branch
-	repoName, branch, err := workspace.ParseSessionName(sessionName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Find project by short name
-	projects, err := DiscoverProjects(workspaceDir)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, proj := range projects {
-		if filepath.Base(proj.Name) == repoName {
-			// Found matching project, look for worktree
-			return GetWorktree(proj, branch)
-		}
-	}
-
-	return nil, eris.Errorf("no worktree found for session: %s", sessionName)
-}
-
-// CreateProjectRecord creates a project record (for compatibility)
-// In the stateless model, this just ensures the directory structure exists
-func CreateProjectRecord(workspaceDir string, project *models.Project) error {
-	projectPath := filepath.Join(workspaceDir, project.Name)
-	if err := os.MkdirAll(projectPath, 0o755); err != nil {
-		return eris.Wrap(err, "failed to create project directory")
-	}
-	return nil
-}
-
-// CreateWorktreeRecord creates a worktree record (for compatibility)
-// In the stateless model, this is a no-op since worktrees are discovered
-func CreateWorktreeRecord(worktree *models.Worktree) error {
-	// No-op: worktree already exists in filesystem via git worktree add
-	return nil
-}
-
-// CreateSessionRecord creates a session record (for compatibility)
-// In the stateless model, this is a no-op since sessions are discovered
-func CreateSessionRecord(session *models.Session) error {
-	// No-op: session already exists via session manager
-	return nil
 }
