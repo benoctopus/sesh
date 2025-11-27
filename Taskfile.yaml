@@ -137,3 +137,23 @@ tasks:
     deps: [build]
     cmds:
       - "{{.DIST_DIR}}/{{.BINARY_NAME}} --help"
+
+  release:
+    desc: "Create a new release (usage: task release -- --type [patch|minor|major])"
+    cmds:
+      - ./scripts/release.sh {{.CLI_ARGS}}
+
+  release:patch:
+    desc: Create a new patch release (e.g., 0.1.6 -> 0.1.7)
+    cmds:
+      - ./scripts/release.sh --type patch
+
+  release:minor:
+    desc: Create a new minor release (e.g., 0.1.6 -> 0.2.0)
+    cmds:
+      - ./scripts/release.sh --type minor
+
+  release:major:
+    desc: Create a new major release (e.g., 0.1.6 -> 1.0.0)
+    cmds:
+      - ./scripts/release.sh --type major
