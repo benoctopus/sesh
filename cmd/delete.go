@@ -51,6 +51,10 @@ func init() {
 	deleteCmd.Flags().BoolVarP(&deleteForce, "force", "f", false, "Skip confirmation prompt")
 	deleteCmd.Flags().
 		StringVarP(&deleteProjectName, "project", "p", "", "Specify project explicitly")
+
+	// Register completions
+	_ = deleteCmd.RegisterFlagCompletionFunc("project", completeProjects)
+	deleteCmd.ValidArgsFunction = completeBranches
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {

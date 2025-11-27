@@ -37,6 +37,9 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(infoCmd)
+
+	// Register completions
+	infoCmd.ValidArgsFunction = completeSessions
 }
 
 func runInfo(cmd *cobra.Command, args []string) error {

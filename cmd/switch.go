@@ -68,6 +68,10 @@ func init() {
 		BoolVar(&switchPR, "pr", false, "Select from open pull requests")
 	switchCmd.Flags().
 		BoolVarP(&switchDetach, "detach", "d", false, "Create session without attaching to it")
+
+	// Register completions
+	_ = switchCmd.RegisterFlagCompletionFunc("project", completeProjects)
+	switchCmd.ValidArgsFunction = completeBranches
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
