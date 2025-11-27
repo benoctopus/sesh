@@ -6,6 +6,14 @@ vars:
   MAIN_PACKAGE: .
   GO_FILES:
     sh: find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./.direnv/*"
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  BUILD_DATE:
+    sh: date -u '+%Y-%m-%d_%H:%M:%S'
+  BUILT_BY:
+    sh: whoami
 
 tasks:
   default:
@@ -24,13 +32,32 @@ tasks:
       - "{{.DIST_DIR}}/{{.BINARY_NAME}}"
     cmds:
       - mkdir -p {{.DIST_DIR}}
-      - go build -o {{.DIST_DIR}}/{{.BINARY_NAME}} {{.MAIN_PACKAGE}}
+      - >
+        go build
+        -ldflags "
+        -X github.com/benoctopus/sesh/cmd.version={{.VERSION}}
+        -X github.com/benoctopus/sesh/cmd.commit={{.COMMIT}}
+        -X github.com/benoctopus/sesh/cmd.buildDate={{.BUILD_DATE}}
+        -X github.com/benoctopus/sesh/cmd.builtBy={{.BUILT_BY}}
+        "
+        -o {{.DIST_DIR}}/{{.BINARY_NAME}}
+        {{.MAIN_PACKAGE}}
 
   build:debug:
     desc: Build the binary with debug symbols
     cmds:
       - mkdir -p {{.DIST_DIR}}
-      - go build -gcflags="all=-N -l" -o {{.DIST_DIR}}/{{.BINARY_NAME}} {{.MAIN_PACKAGE}}
+      - >
+        go build
+        -gcflags="all=-N -l"
+        -ldflags "
+        -X github.com/benoctopus/sesh/cmd.version={{.VERSION}}
+        -X github.com/benoctopus/sesh/cmd.commit={{.COMMIT}}
+        -X github.com/benoctopus/sesh/cmd.buildDate={{.BUILD_DATE}}
+        -X github.com/benoctopus/sesh/cmd.builtBy={{.BUILT_BY}}
+        "
+        -o {{.DIST_DIR}}/{{.BINARY_NAME}}
+        {{.MAIN_PACKAGE}}
 
   install:
     desc: Install the binary to $GOPATH/bin
