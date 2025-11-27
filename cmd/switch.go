@@ -25,6 +25,7 @@ var (
 	switchProjectName    string
 	switchStartupCommand string
 	switchPR             bool
+	switchDetach         bool
 )
 
 var switchCmd = &cobra.Command{
@@ -51,7 +52,8 @@ Examples:
   sesh switch --project myproject feature-bar                # Explicit project
   sesh switch -p git@github.com:user/repo.git main           # Auto-clone and switch
   sesh switch -p https://github.com/user/repo.git feature    # Auto-clone HTTPS URL
-  sesh switch -c "direnv allow" feature-baz                  # Run startup command`,
+  sesh switch -c "direnv allow" feature-baz                  # Run startup command
+  sesh switch -d feature-test                                # Create session without attaching`,
 	RunE: runSwitch,
 }
 
@@ -63,6 +65,8 @@ func init() {
 		StringVarP(&switchStartupCommand, "command", "c", "", "Command to run after switching to session")
 	switchCmd.Flags().
 		BoolVar(&switchPR, "pr", false, "Select from open pull requests")
+	switchCmd.Flags().
+		BoolVarP(&switchDetach, "detach", "d", false, "Create session without attaching to it")
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -232,8 +236,8 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 
 		if exists {
-			// In noninteractive mode, don't attach
-			if !tty.IsInteractive() {
+			// In noninteractive mode or detached mode, don't attach
+			if !tty.IsInteractive() || switchDetach {
 				disp.Printf("%s Session %s already exists\n", disp.SuccessText("✓"), disp.Bold(sessionName))
 				return nil
 			}
@@ -263,8 +267,8 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		// In noninteractive mode, don't attach
-		if !tty.IsInteractive() {
+		// In noninteractive mode or detached mode, don't attach
+		if !tty.IsInteractive() || switchDetach {
 			disp.Printf("%s Session %s created successfully\n", disp.SuccessText("✓"), disp.Bold(sessionName))
 			return nil
 		}
@@ -320,8 +324,8 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// In noninteractive mode, don't attach
-	if !tty.IsInteractive() {
+	// In noninteractive mode or detached mode, don't attach
+	if !tty.IsInteractive() || switchDetach {
 		return nil
 	}
 
