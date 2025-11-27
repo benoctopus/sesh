@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
+	"github.com/benoctopus/sesh/internal/tty"
 	"github.com/rotisserie/eris"
 )
 
@@ -23,6 +24,11 @@ const (
 // The reader should output one item per line
 // This starts fzf immediately and pipes data directly for maximum responsiveness
 func SelectBranchFromReader(reader io.ReadCloser) (string, error) {
+	if !tty.IsInteractive() {
+		reader.Close()
+		return "", eris.New("interactive selection not available in noninteractive mode")
+	}
+
 	finder, err := DetectFuzzyFinder()
 	if err != nil {
 		return "", eris.Wrap(err, "fuzzy finder required for streaming selection")
@@ -88,6 +94,7 @@ func RunFuzzyFinderFromReader(reader io.ReadCloser, finder string) (string, erro
 	if err != nil {
 		return "", eris.Wrap(err, "failed to get fuzzy finder output")
 	}
+
 	selected := strings.TrimSpace(string(out))
 	if selected == "" {
 		return "", eris.New("no selection made")

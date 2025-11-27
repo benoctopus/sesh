@@ -12,6 +12,7 @@ import (
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/tty"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
@@ -104,7 +105,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		branch = args[0]
 	} else {
-		// No branch specified, use streaming fuzzy finder
+		// No branch specified
+		if !tty.IsInteractive() {
+			return eris.New("branch argument required in noninteractive mode (usage: sesh switch <branch>)")
+		}
+
+		// Use streaming fuzzy finder in interactive mode
 		// Start git fetch in background - don't wait for it
 		go func() {
 			if err := git.Fetch(proj.LocalPath); err != nil {
@@ -152,6 +158,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 
 		if exists {
+			// In noninteractive mode, don't attach
+			if !tty.IsInteractive() {
+				disp.Printf("%s Session %s already exists\n", disp.SuccessText("✓"), disp.Bold(sessionName))
+				return nil
+			}
 			// Attach to existing session
 			return sessionMgr.Attach(sessionName)
 		}
@@ -176,6 +187,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 					fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
 				}
 			}
+		}
+
+		// In noninteractive mode, don't attach
+		if !tty.IsInteractive() {
+			disp.Printf("%s Session %s created successfully\n", disp.SuccessText("✓"), disp.Bold(sessionName))
+			return nil
 		}
 
 		return sessionMgr.Attach(sessionName)
@@ -217,7 +234,6 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	disp.Printf("\n%s Successfully switched to %s\n", disp.SuccessText("✓"), disp.Bold(branch))
 	disp.Printf("  %s %s\n", disp.Faint("Worktree:"), worktreePath)
 	disp.Printf("  %s %s\n", disp.Faint("Session:"), sessionName)
-	disp.Printf("\n%s Attaching to session...\n", disp.InfoText("→"))
 
 	// Execute startup command if configured
 	startupCmd := getStartupCommand(cfg, worktreePath)
@@ -230,7 +246,13 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// In noninteractive mode, don't attach
+	if !tty.IsInteractive() {
+		return nil
+	}
+
 	// Attach to session
+	disp.Printf("\n%s Attaching to session...\n", disp.InfoText("→"))
 	return sessionMgr.Attach(sessionName)
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/tty"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
@@ -93,8 +94,13 @@ func deleteProject(cfg *config.Config, proj *models.Project, disp display.Printe
 		return eris.Wrap(err, "failed to discover worktrees")
 	}
 
+	// In noninteractive mode, require --force flag
 	if !deleteForce {
-		// Ask for confirmation
+		if !tty.IsInteractive() {
+			return eris.New("--force flag required for deletion in noninteractive mode")
+		}
+
+		// Ask for confirmation in interactive mode
 		disp.Printf(
 			"This will delete project '%s' with %d worktree(s) and all associated sessions.\n",
 			proj.Name,
@@ -168,8 +174,13 @@ func deleteBranch(cfg *config.Config, proj *models.Project, branch string, disp 
 		return eris.Errorf("cannot delete main worktree, use --all to delete the entire project")
 	}
 
+	// In noninteractive mode, require --force flag
 	if !deleteForce {
-		// Ask for confirmation
+		if !tty.IsInteractive() {
+			return eris.New("--force flag required for deletion in noninteractive mode")
+		}
+
+		// Ask for confirmation in interactive mode
 		disp.Printf(
 			"This will delete worktree for branch '%s' and its associated session.\n",
 			branch,
