@@ -79,6 +79,38 @@ func TestParseRemoteURL(t *testing.T) {
 			remoteURL: "https://github.com/repo",
 			wantErr:   true,
 		},
+		{
+			name:      "HTTPS URL with port",
+			remoteURL: "https://example.com:8080/user/repo.git",
+			wantHost:  "example.com-8080",
+			wantOrg:   "user",
+			wantRepo:  "repo",
+			wantErr:   false,
+		},
+		{
+			name:      "SSH URL with port",
+			remoteURL: "ssh://git@example.com:2222/user/repo.git",
+			wantHost:  "example.com-2222",
+			wantOrg:   "user",
+			wantRepo:  "repo",
+			wantErr:   false,
+		},
+		{
+			name:      "SSH URL with port and nested org",
+			remoteURL: "ssh://git@gitlab.example.com:2222/org/subgroup/project.git",
+			wantHost:  "gitlab.example.com-2222",
+			wantOrg:   "org/subgroup",
+			wantRepo:  "project",
+			wantErr:   false,
+		},
+		{
+			name:      "HTTPS URL with non-standard port",
+			remoteURL: "https://git.company.com:7999/team/repo.git",
+			wantHost:  "git.company.com-7999",
+			wantOrg:   "team",
+			wantRepo:  "repo",
+			wantErr:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -138,6 +170,24 @@ func TestGenerateProjectName(t *testing.T) {
 			name:      "invalid URL",
 			remoteURL: "invalid",
 			wantErr:   true,
+		},
+		{
+			name:      "HTTPS with port",
+			remoteURL: "https://example.com:8080/user/repo.git",
+			want:      "example.com-8080/user/repo",
+			wantErr:   false,
+		},
+		{
+			name:      "SSH with port",
+			remoteURL: "ssh://git@example.com:2222/user/repo.git",
+			want:      "example.com-2222/user/repo",
+			wantErr:   false,
+		},
+		{
+			name:      "HTTPS with non-standard port and nested org",
+			remoteURL: "https://git.company.com:7999/org/subgroup/project.git",
+			want:      "git.company.com-7999/org/subgroup/project",
+			wantErr:   false,
 		},
 	}
 
