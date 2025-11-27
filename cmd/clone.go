@@ -105,12 +105,16 @@ func runClone(cmd *cobra.Command, args []string) error {
 
 	// Execute startup command if configured
 	startupCmd, err := config.GetStartupCommand(worktreePath)
-	if err == nil && startupCmd != "" && sessionMgr.Name() == "tmux" {
+	if err == nil && startupCmd != "" && (sessionMgr.Name() == "tmux" || sessionMgr.Name() == "screen") {
 		fmt.Printf("%s Running startup command: %s\n", ui.Info("⚙"), ui.Faint(startupCmd))
+		var sendErr error
 		if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
-			if err := tmuxMgr.SendKeys(sessionName, startupCmd); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
-			}
+			sendErr = tmuxMgr.SendKeys(sessionName, startupCmd)
+		} else if screenMgr, ok := sessionMgr.(*session.ScreenManager); ok {
+			sendErr = screenMgr.SendKeys(sessionName, startupCmd)
+		}
+		if sendErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", sendErr)
 		}
 	}
 
