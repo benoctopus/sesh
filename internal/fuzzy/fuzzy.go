@@ -1,6 +1,8 @@
 package fuzzy
 
 import (
+	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -25,7 +27,7 @@ const (
 // This starts fzf immediately and pipes data directly for maximum responsiveness
 func SelectBranchFromReader(reader io.ReadCloser) (string, error) {
 	if !tty.IsInteractive() {
-		reader.Close()
+		reader.Close() //nolint:errcheck // Error not critical in early return
 		return "", eris.New("interactive selection not available in noninteractive mode")
 	}
 
@@ -98,6 +100,86 @@ func RunFuzzyFinderFromReader(reader io.ReadCloser, finder string) (string, erro
 	selected := strings.TrimSpace(string(out))
 	if selected == "" {
 		return "", eris.New("no selection made")
+	}
+
+	return selected, nil
+}
+
+// MultiSelect presents a fuzzy finder with multi-select support (fzf only)
+// Returns a list of selected items, or an error
+// Users can select multiple items using TAB, and confirm with ENTER
+func MultiSelect(items []string, prompt string) ([]string, error) {
+	if len(items) == 0 {
+		return nil, eris.New("no items available to select")
+	}
+
+	// Check if fzf is available (peco doesn't support multi-select)
+	if _, err := exec.LookPath("fzf"); err != nil {
+		return nil, eris.New("fzf required for multi-select (install fzf)")
+	}
+
+	args := []string{
+		"--multi",
+		"--height", "40%",
+		"--reverse",
+		"--border",
+		"--header", "TAB to select/deselect, ENTER to confirm",
+	}
+	if prompt != "" {
+		args = append(args, "--prompt", prompt)
+	}
+
+	cmd := exec.Command("fzf", args...)
+
+	// Create pipe to send items to fuzzy finder
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to create stdin pipe")
+	}
+
+	// Capture stdout for the selections
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to create stdout pipe")
+	}
+
+	// Set stderr to show errors
+	cmd.Stderr = os.Stderr
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return nil, eris.Wrap(err, "failed to start fuzzy finder")
+	}
+
+	// Write items to stdin in a goroutine
+	go func() {
+		defer stdin.Close() //nolint:errcheck // Defer close in cleanup
+		for _, item := range items {
+			fmt.Fprintln(stdin, item) //nolint:errcheck // Write errors will be caught by command execution
+		}
+	}()
+
+	// Read all selected items
+	var selected []string
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			selected = append(selected, line)
+		}
+	}
+
+	// Wait for the command to finish
+	if err := cmd.Wait(); err != nil {
+		// User might have cancelled (Ctrl+C)
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 130 {
+			return nil, eris.New("selection cancelled")
+		}
+		return nil, eris.Wrap(err, "fuzzy finder failed")
+	}
+
+	if len(selected) == 0 {
+		return nil, eris.New("no selection made")
 	}
 
 	return selected, nil
