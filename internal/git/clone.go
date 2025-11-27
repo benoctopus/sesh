@@ -47,20 +47,57 @@ func GetRemoteURL(repoPath string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// sanitizeHost removes or replaces characters in a hostname that are problematic for filesystem paths.
+// Specifically, it replaces colons (from port numbers) with hyphens to avoid issues with Docker volume mounts
+// and other tools that interpret colons as special characters.
+// Examples:
+//   - example.com:8080 -> example.com-8080
+//   - github.com -> github.com
+func sanitizeHost(host string) string {
+	// Replace colons with hyphens to avoid Docker mount issues
+	// e.g., "example.com:8080" -> "example.com-8080"
+	return strings.ReplaceAll(host, ":", "-")
+}
+
 // ParseRemoteURL parses a git remote URL and extracts the host, organization, and repository name
-// Supports both SSH and HTTPS URLs
+// Supports SSH (including ssh:// URLs), SCP-style (git@host:path), and HTTPS URLs
+// Port numbers in the host are sanitized (colons replaced with hyphens) to avoid filesystem issues
 // Examples:
 //   - git@github.com:user/repo.git -> github.com, user, repo
+//   - ssh://git@example.com:2222/user/repo.git -> example.com-2222, user, repo
 //   - https://github.com/user/repo.git -> github.com, user, repo
+//   - https://example.com:8080/user/repo.git -> example.com-8080, user, repo
 //   - https://gitlab.com/org/subgroup/project.git -> gitlab.com, org/subgroup, project
 func ParseRemoteURL(remoteURL string) (host, org, repo string, err error) {
-	// Handle SSH URLs (git@host:path)
+	// Handle SSH URLs in ssh:// format (e.g., ssh://git@example.com:2222/path)
+	if strings.HasPrefix(remoteURL, "ssh://") {
+		parsedURL, err := url.Parse(remoteURL)
+		if err != nil {
+			return "", "", "", eris.Wrap(err, "failed to parse SSH URL")
+		}
+
+		host = sanitizeHost(parsedURL.Host)
+		path := strings.TrimPrefix(parsedURL.Path, "/")
+		path = strings.TrimSuffix(path, ".git")
+
+		pathParts := strings.Split(path, "/")
+		if len(pathParts) < 2 {
+			return "", "", "", eris.Errorf("invalid repository path: %s", path)
+		}
+
+		repo = pathParts[len(pathParts)-1]
+		org = strings.Join(pathParts[:len(pathParts)-1], "/")
+
+		return host, org, repo, nil
+	}
+
+	// Handle SCP-style SSH URLs (git@host:path)
 	if strings.HasPrefix(remoteURL, "git@") {
 		parts := strings.SplitN(remoteURL, ":", 2)
 		if len(parts) != 2 {
 			return "", "", "", eris.Errorf("invalid SSH URL format: %s", remoteURL)
 		}
-		host = strings.TrimPrefix(parts[0], "git@")
+		host = sanitizeHost(strings.TrimPrefix(parts[0], "git@"))
 		path := strings.TrimSuffix(parts[1], ".git")
 
 		// Split path into org and repo
@@ -80,7 +117,7 @@ func ParseRemoteURL(remoteURL string) (host, org, repo string, err error) {
 		return "", "", "", eris.Wrap(err, "failed to parse remote URL")
 	}
 
-	host = parsedURL.Host
+	host = sanitizeHost(parsedURL.Host)
 	path := strings.TrimPrefix(parsedURL.Path, "/")
 	path = strings.TrimSuffix(path, ".git")
 
