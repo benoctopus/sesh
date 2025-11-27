@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var cloneDetach bool
+
 var cloneCmd = &cobra.Command{
 	Use:     "clone <remote-url>",
 	Aliases: []string{"cl"},
@@ -24,13 +26,16 @@ create the main worktree, and set up a session.
 
 Examples:
   sesh clone git@github.com:user/repo.git
-  sesh clone https://github.com/user/repo.git`,
+  sesh clone https://github.com/user/repo.git
+  sesh clone -d https://github.com/user/repo.git     # Clone without attaching`,
 	Args: cobra.ExactArgs(1),
 	RunE: runClone,
 }
 
 func init() {
 	rootCmd.AddCommand(cloneCmd)
+	cloneCmd.Flags().
+		BoolVarP(&cloneDetach, "detach", "d", false, "Create session without attaching to it")
 }
 
 func runClone(cmd *cobra.Command, args []string) error {
@@ -102,7 +107,6 @@ func runClone(cmd *cobra.Command, args []string) error {
 	disp.Successf("Successfully cloned %s", disp.Bold(projectName))
 	disp.Printf("  %s %s\n", disp.Faint("Worktree:"), worktreePath)
 	disp.Printf("  %s %s\n", disp.Faint("Session:"), sessionName)
-	disp.Infof("Attaching to session...")
 
 	// Execute startup command if configured
 	startupCmd, err := config.GetStartupCommand(worktreePath)
@@ -115,9 +119,12 @@ func runClone(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Attach to the new session
-	if err := sessionMgr.Attach(sessionName); err != nil {
-		return eris.Wrap(err, "failed to attach to session")
+	// Attach to the new session if not detached
+	if !cloneDetach {
+		disp.Infof("Attaching to session...")
+		if err := sessionMgr.Attach(sessionName); err != nil {
+			return eris.Wrap(err, "failed to attach to session")
+		}
 	}
 
 	return nil
