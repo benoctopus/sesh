@@ -158,8 +158,9 @@ Instructions:
 4. Focus on user-facing changes and improvements
 5. Use conventional commit style
 6. Keep it concise and professional
-7. Do NOT include any markdown formatting, headers, or extra text
+7. Do NOT include any introductory phrases like 'Here is the summary' or 'Based on the analysis'
 8. Output ONLY the summary text that will be used as the commit and tag message
+9. Start directly with the conventional commit prefix (feat:, fix:, chore:, etc.)
 
 Example format:
 feat: add new workspace management features
@@ -171,18 +172,33 @@ CLAUDE_OUTPUT=$(mktemp)
 trap 'rm -f "$CLAUDE_OUTPUT"' EXIT
 
 export CLAUDE_CODE_OAUTH_TOKEN="op://sesh/Claude code auth token/password"
-if ! op run -- claude -p "$CLAUDE_PROMPT" --output-format text >"$CLAUDE_OUTPUT" 2>&1; then
+if ! op run -- claude -p "$CLAUDE_PROMPT" --output-format json >"$CLAUDE_OUTPUT" 2>&1; then
   log_error "Failed to generate release summary with Claude Code"
   cat "$CLAUDE_OUTPUT" >&2
   exit 1
 fi
 
-# Extract the release message from Claude's output
-# Claude may add some preamble, so we try to get the actual commit message
-RELEASE_MESSAGE=$(cat "$CLAUDE_OUTPUT")
+# Parse JSON output to extract the actual message
+# The JSON output has the response in a 'content' or 'text' field
+RELEASE_MESSAGE=$(jq -r '.content // .text // .message // empty' "$CLAUDE_OUTPUT" 2>/dev/null || echo "")
 
-# Clean up the message (remove any leading/trailing whitespace)
-RELEASE_MESSAGE=$(echo "$RELEASE_MESSAGE" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+# If jq parsing failed, try to extract from the raw output
+if [[ -z "$RELEASE_MESSAGE" ]]; then
+  log_warn "Could not parse JSON response, attempting fallback extraction..."
+  RELEASE_MESSAGE=$(cat "$CLAUDE_OUTPUT")
+fi
+
+# Clean up the message
+# Remove common preambles that Claude might add
+RELEASE_MESSAGE=$(echo "$RELEASE_MESSAGE" | sed -E \
+  -e 's/^(Here is|Here'\''s) (the|a) (release )?summary:?\s*//i' \
+  -e 's/^Based on (the )?(git )?(history )?analysis,?\s*//i' \
+  -e 's/^(The )?release summary is:?\s*//i' \
+  -e 's/^[[:space:]]*//' \
+  -e 's/[[:space:]]*$//')
+
+# If the message starts with a newline followed by conventional commit format, clean it up
+RELEASE_MESSAGE=$(echo "$RELEASE_MESSAGE" | sed -E 's/^\n+(feat|fix|chore|docs|refactor|test|style|perf|ci|build):/\1:/')
 
 if [[ -z "$RELEASE_MESSAGE" ]]; then
   log_error "Claude Code did not generate a release message"
