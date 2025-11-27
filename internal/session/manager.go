@@ -68,13 +68,13 @@ func NewSessionManager(backend string) (SessionManager, error) {
 	switch backendType {
 	case BackendTmux:
 		return NewTmuxManager(), nil
+	case BackendScreen:
+		return NewScreenManager(), nil
 	case BackendNone:
 		return NewNoneManager(), nil
 	// Future backends can be added here:
 	// case BackendZellij:
 	//     return NewZellijManager(), nil
-	// case BackendScreen:
-	//     return NewScreenManager(), nil
 	default:
 		return nil, eris.Errorf("unsupported session backend: %s", backend)
 	}
