@@ -53,12 +53,14 @@ func RunMigrations(db *sql.DB) error {
 
 		// Execute the migration SQL
 		if _, err := tx.Exec(m.sql); err != nil {
+			//nolint:errcheck // Rollback in error path
 			tx.Rollback()
 			return eris.Wrapf(err, "failed to execute migration %d", m.version)
 		}
 
 		// Record migration as applied
 		if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES (?)", m.version); err != nil {
+			//nolint:errcheck // Rollback in error path
 			tx.Rollback()
 			return eris.Wrapf(err, "failed to record migration %d", m.version)
 		}

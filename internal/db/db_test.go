@@ -33,6 +33,8 @@ func TestInitDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitDB() failed: %v", err)
 	}
+	//nolint:errcheck // Test cleanup
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	// Verify database is initialized
@@ -70,6 +72,7 @@ func TestInitDB_InvalidPath(t *testing.T) {
 
 	db, err := InitDB(invalidPath)
 	if err == nil {
+		//nolint:errcheck // Test cleanup in error case
 		db.Close()
 		t.Error("InitDB() should fail with invalid path")
 	}
@@ -79,6 +82,8 @@ func TestInitDB_InvalidPath(t *testing.T) {
 
 func TestCreateProject(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -115,6 +120,7 @@ func TestCreateProject(t *testing.T) {
 
 func TestCreateProject_Duplicate(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -143,6 +149,7 @@ func TestCreateProject_Duplicate(t *testing.T) {
 
 func TestGetProject_NotFound(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	_, err := GetProject(db, "nonexistent")
@@ -153,6 +160,7 @@ func TestGetProject_NotFound(t *testing.T) {
 
 func TestGetProjectByID(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -177,6 +185,7 @@ func TestGetProjectByID(t *testing.T) {
 
 func TestGetProjectByRemote(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -201,6 +210,7 @@ func TestGetProjectByRemote(t *testing.T) {
 
 func TestGetAllProjects(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	// Create multiple projects
@@ -235,6 +245,7 @@ func TestGetAllProjects(t *testing.T) {
 
 func TestUpdateProjectFetchTime(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -274,6 +285,7 @@ func TestUpdateProjectFetchTime(t *testing.T) {
 
 func TestDeleteProject(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -302,6 +314,7 @@ func TestDeleteProject(t *testing.T) {
 
 func TestCreateWorktree(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	// Create a project first
@@ -349,6 +362,7 @@ func TestCreateWorktree(t *testing.T) {
 
 func TestGetWorktreeByPath(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -382,6 +396,7 @@ func TestGetWorktreeByPath(t *testing.T) {
 
 func TestGetWorktreesByProject(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -427,6 +442,7 @@ func TestGetWorktreesByProject(t *testing.T) {
 
 func TestUpdateWorktreeLastUsed(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -469,6 +485,7 @@ func TestUpdateWorktreeLastUsed(t *testing.T) {
 
 func TestDeleteWorktree(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -506,6 +523,7 @@ func TestDeleteWorktree(t *testing.T) {
 
 func TestCreateSession(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	// Create project and worktree first
@@ -555,6 +573,7 @@ func TestCreateSession(t *testing.T) {
 
 func TestGetSessionByTmuxName(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -596,6 +615,7 @@ func TestGetSessionByTmuxName(t *testing.T) {
 
 func TestGetAllSessions(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -641,6 +661,7 @@ func TestGetAllSessions(t *testing.T) {
 
 func TestGetAllSessionDetails(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -697,6 +718,7 @@ func TestGetAllSessionDetails(t *testing.T) {
 
 func TestUpdateSessionLastAttached(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -747,6 +769,7 @@ func TestUpdateSessionLastAttached(t *testing.T) {
 
 func TestDeleteSession(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	project := &models.Project{
@@ -792,6 +815,7 @@ func TestDeleteSession(t *testing.T) {
 
 func TestDeleteProject_CascadesWorktreesAndSessions(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	// Create project, worktree, and session
@@ -842,6 +866,7 @@ func TestDeleteProject_CascadesWorktreesAndSessions(t *testing.T) {
 
 func TestDeleteWorktree_CascadesSessions(t *testing.T) {
 	db := setupTestDB(t)
+	//nolint:errcheck // Test cleanup
 	defer db.Close()
 
 	// Create project, worktree, and session

@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/benoctopus/sesh/internal/config"
+	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
-	"github.com/benoctopus/sesh/internal/ui"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
@@ -59,6 +59,8 @@ func runList(cmd *cobra.Command, args []string) error {
 }
 
 func listAllProjects(cfg *config.Config) error {
+	disp := display.NewStderr()
+
 	// Discover all projects from filesystem
 	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
 	if err != nil {
@@ -66,11 +68,11 @@ func listAllProjects(cfg *config.Config) error {
 	}
 
 	if len(projects) == 0 {
-		fmt.Printf("%s No projects found.\n", ui.Info("ℹ"))
-		fmt.Printf(
+		disp.Info("No projects found.")
+		disp.Printf(
 			"  %s Clone a repository with: %s\n",
-			ui.Faint("→"),
-			ui.Bold("sesh clone <remote-url>"),
+			disp.Faint("→"),
+			disp.Bold("sesh clone <remote-url>"),
 		)
 		return nil
 	}
@@ -80,13 +82,14 @@ func listAllProjects(cfg *config.Config) error {
 		if err != nil {
 			return eris.Wrap(err, "failed to marshal projects to JSON")
 		}
+		// JSON output is pipeable, so use stdout
 		fmt.Println(string(data))
 		return nil
 	}
 
 	// Print tree header
-	fmt.Printf("\n%s\n", ui.Bold("Projects"))
-	fmt.Println()
+	disp.Printf("\n%s\n", disp.Bold("Projects"))
+	disp.Println()
 
 	for i, proj := range projects {
 		// Get worktree count
@@ -107,11 +110,11 @@ func listAllProjects(cfg *config.Config) error {
 			childPrefix = "    "
 		}
 
-		fmt.Printf(
+		disp.Printf(
 			"%s %s %s\n",
-			ui.Faint(prefix),
-			ui.Bold(proj.Name),
-			ui.Faint(
+			disp.Faint(prefix),
+			disp.Bold(proj.Name),
+			disp.Faint(
 				fmt.Sprintf(
 					"(%d worktree%s, created %s)",
 					len(worktrees),
@@ -130,20 +133,22 @@ func listAllProjects(cfg *config.Config) error {
 			}
 
 			lastUsed := formatTimeAgo(wt.LastUsed)
-			fmt.Printf("%s%s %s %s\n",
-				ui.Faint(childPrefix),
-				ui.Faint(wtPrefix),
-				ui.Info(wt.Branch),
-				ui.Faint(fmt.Sprintf("(last used %s)", lastUsed)),
+			disp.Printf("%s%s %s %s\n",
+				disp.Faint(childPrefix),
+				disp.Faint(wtPrefix),
+				disp.InfoText(wt.Branch),
+				disp.Faint(fmt.Sprintf("(last used %s)", lastUsed)),
 			)
 		}
 	}
-	fmt.Println()
+	disp.Println()
 
 	return nil
 }
 
 func listAllSessions(cfg *config.Config) error {
+	disp := display.NewStderr()
+
 	// Initialize session manager
 	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
 	if err != nil {
@@ -205,16 +210,16 @@ func listAllSessions(cfg *config.Config) error {
 	}
 
 	if len(sessions) == 0 {
-		fmt.Printf("%s No worktrees found.\n", ui.Info("ℹ"))
-		fmt.Printf(
+		disp.Info("No worktrees found.")
+		disp.Printf(
 			"  %s Clone a repository with: %s\n",
-			ui.Faint("→"),
-			ui.Bold("sesh clone <remote-url>"),
+			disp.Faint("→"),
+			disp.Bold("sesh clone <remote-url>"),
 		)
-		fmt.Printf(
+		disp.Printf(
 			"  %s Or switch to a branch with: %s\n",
-			ui.Faint("→"),
-			ui.Bold("sesh switch <branch>"),
+			disp.Faint("→"),
+			disp.Bold("sesh switch <branch>"),
 		)
 		return nil
 	}
@@ -224,6 +229,7 @@ func listAllSessions(cfg *config.Config) error {
 		if err != nil {
 			return eris.Wrap(err, "failed to marshal sessions to JSON")
 		}
+		// JSON output is pipeable, so use stdout
 		fmt.Println(string(data))
 		return nil
 	}
@@ -242,8 +248,8 @@ func listAllSessions(cfg *config.Config) error {
 	}
 
 	// Print tree header
-	fmt.Printf("\n%s\n", ui.Bold("Sessions"))
-	fmt.Println()
+	disp.Printf("\n%s\n", disp.Bold("Sessions"))
+	disp.Println()
 
 	for i, projName := range projectOrder {
 		isLastProject := i == len(projectOrder)-1
@@ -257,9 +263,9 @@ func listAllSessions(cfg *config.Config) error {
 			childPrefix = "    "
 		}
 
-		fmt.Printf("%s %s\n",
-			ui.Faint(prefix),
-			ui.Bold(projName),
+		disp.Printf("%s %s\n",
+			disp.Faint(prefix),
+			disp.Bold(projName),
 		)
 
 		// Print sessions/branches as children
@@ -270,23 +276,23 @@ func listAllSessions(cfg *config.Config) error {
 				sessPrefix = "└──"
 			}
 
-			statusIcon := ui.Faint("○")
-			statusText := ui.Faint("stopped")
+			statusIcon := disp.Faint("○")
+			statusText := disp.Faint("stopped")
 			if sess.IsRunning {
-				statusIcon = ui.Success("●")
-				statusText = ui.Success("running")
+				statusIcon = disp.SuccessText("●")
+				statusText = disp.SuccessText("running")
 			}
 
-			fmt.Printf("%s%s %s %s %s\n",
-				ui.Faint(childPrefix),
-				ui.Faint(sessPrefix),
-				ui.Info(sess.Branch),
+			disp.Printf("%s%s %s %s %s\n",
+				disp.Faint(childPrefix),
+				disp.Faint(sessPrefix),
+				disp.InfoText(sess.Branch),
 				statusIcon,
 				statusText,
 			)
 		}
 	}
-	fmt.Println()
+	disp.Println()
 
 	return nil
 }

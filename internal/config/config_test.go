@@ -72,6 +72,22 @@ func TestExpandHome(t *testing.T) {
 }
 
 func TestGetConfigDir(t *testing.T) {
+	// Create a temporary directory for isolated testing
+	tempHome := t.TempDir()
+
+	// Save and restore original HOME
+	originalHome := os.Getenv("HOME")
+	defer func() {
+		if originalHome != "" {
+			//nolint:errcheck // Test cleanup
+			os.Setenv("HOME", originalHome)
+		}
+	}()
+
+	// Set HOME to temp directory to isolate from real config
+	//nolint:errcheck // Test setup
+	os.Setenv("HOME", tempHome)
+
 	configDir, err := GetConfigDir()
 	if err != nil {
 		t.Fatalf("GetConfigDir() returned error: %v", err)
@@ -88,6 +104,22 @@ func TestGetConfigDir(t *testing.T) {
 }
 
 func TestGetDBPath(t *testing.T) {
+	// Create a temporary directory for isolated testing
+	tempHome := t.TempDir()
+
+	// Save and restore original HOME
+	originalHome := os.Getenv("HOME")
+	defer func() {
+		if originalHome != "" {
+			//nolint:errcheck // Test cleanup
+			os.Setenv("HOME", originalHome)
+		}
+	}()
+
+	// Set HOME to temp directory to isolate from real config
+	//nolint:errcheck // Test setup
+	os.Setenv("HOME", tempHome)
+
 	dbPath, err := GetDBPath()
 	if err != nil {
 		t.Fatalf("GetDBPath() returned error: %v", err)
@@ -110,18 +142,33 @@ func TestGetDBPath(t *testing.T) {
 }
 
 func TestGetWorkspaceDir(t *testing.T) {
+	// Create a temporary directory for isolated testing
+	tempHome := t.TempDir()
+
 	// Save and restore original environment
 	originalEnv := os.Getenv("SESH_WORKSPACE")
+	originalHome := os.Getenv("HOME")
 	defer func() {
 		if originalEnv != "" {
+			//nolint:errcheck // Test cleanup
 			os.Setenv("SESH_WORKSPACE", originalEnv)
 		} else {
+			//nolint:errcheck // Test cleanup
 			os.Unsetenv("SESH_WORKSPACE")
+		}
+		if originalHome != "" {
+			//nolint:errcheck // Test cleanup
+			os.Setenv("HOME", originalHome)
 		}
 	}()
 
+	// Set HOME to temp directory to isolate from real config
+	//nolint:errcheck // Test setup
+	os.Setenv("HOME", tempHome)
+
 	t.Run("with environment variable", func(t *testing.T) {
 		testPath := "/tmp/test-workspace"
+		//nolint:errcheck // Test setup
 		os.Setenv("SESH_WORKSPACE", testPath)
 
 		workspaceDir, err := GetWorkspaceDir()
@@ -135,6 +182,7 @@ func TestGetWorkspaceDir(t *testing.T) {
 	})
 
 	t.Run("with tilde in environment variable", func(t *testing.T) {
+		//nolint:errcheck // Test setup
 		os.Setenv("SESH_WORKSPACE", "~/test-workspace")
 
 		workspaceDir, err := GetWorkspaceDir()
@@ -148,6 +196,7 @@ func TestGetWorkspaceDir(t *testing.T) {
 	})
 
 	t.Run("default workspace", func(t *testing.T) {
+		//nolint:errcheck // Test setup
 		os.Unsetenv("SESH_WORKSPACE")
 
 		workspaceDir, err := GetWorkspaceDir()
@@ -167,15 +216,29 @@ func TestGetWorkspaceDir(t *testing.T) {
 }
 
 func TestGetSessionBackend(t *testing.T) {
+	// Create a temporary directory for isolated testing
+	tempHome := t.TempDir()
+
 	// Save and restore original environment
 	originalEnv := os.Getenv("SESH_SESSION_BACKEND")
+	originalHome := os.Getenv("HOME")
 	defer func() {
 		if originalEnv != "" {
+			//nolint:errcheck // Test cleanup
 			os.Setenv("SESH_SESSION_BACKEND", originalEnv)
 		} else {
+			//nolint:errcheck // Test cleanup
 			os.Unsetenv("SESH_SESSION_BACKEND")
 		}
+		if originalHome != "" {
+			//nolint:errcheck // Test cleanup
+			os.Setenv("HOME", originalHome)
+		}
 	}()
+
+	// Set HOME to temp directory to isolate from real config
+	//nolint:errcheck // Test setup
+	os.Setenv("HOME", tempHome)
 
 	t.Run("with environment variable", func(t *testing.T) {
 		os.Setenv("SESH_SESSION_BACKEND", "tmux")
@@ -205,9 +268,13 @@ func TestGetSessionBackend(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
+	// Create a temporary directory for isolated testing
+	tempHome := t.TempDir()
+
 	// Save and restore original environment
 	originalWorkspace := os.Getenv("SESH_WORKSPACE")
 	originalBackend := os.Getenv("SESH_SESSION_BACKEND")
+	originalHome := os.Getenv("HOME")
 	defer func() {
 		if originalWorkspace != "" {
 			os.Setenv("SESH_WORKSPACE", originalWorkspace)
@@ -219,7 +286,15 @@ func TestLoadConfig(t *testing.T) {
 		} else {
 			os.Unsetenv("SESH_SESSION_BACKEND")
 		}
+		if originalHome != "" {
+			//nolint:errcheck // Test cleanup
+			os.Setenv("HOME", originalHome)
+		}
 	}()
+
+	// Set HOME to temp directory to isolate from real config
+	//nolint:errcheck // Test setup
+	os.Setenv("HOME", tempHome)
 
 	t.Run("load default config", func(t *testing.T) {
 		os.Unsetenv("SESH_WORKSPACE")
@@ -263,15 +338,27 @@ func TestLoadConfig(t *testing.T) {
 }
 
 func TestGetFuzzyFinder(t *testing.T) {
+	// Create a temporary directory for isolated testing
+	tempHome := t.TempDir()
+
 	// Save and restore original environment
 	originalEnv := os.Getenv("SESH_FUZZY_FINDER")
+	originalHome := os.Getenv("HOME")
 	defer func() {
 		if originalEnv != "" {
 			os.Setenv("SESH_FUZZY_FINDER", originalEnv)
 		} else {
 			os.Unsetenv("SESH_FUZZY_FINDER")
 		}
+		if originalHome != "" {
+			//nolint:errcheck // Test cleanup
+			os.Setenv("HOME", originalHome)
+		}
 	}()
+
+	// Set HOME to temp directory to isolate from real config
+	//nolint:errcheck // Test setup
+	os.Setenv("HOME", tempHome)
 
 	t.Run("with environment variable", func(t *testing.T) {
 		os.Setenv("SESH_FUZZY_FINDER", "fzf")
@@ -364,16 +451,16 @@ func TestValidateConfig(t *testing.T) {
 
 func TestSaveAndLoadConfig(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir := t.TempDir()
+	tempHome := t.TempDir()
 
-	// Set XDG_CONFIG_HOME to temp directory
-	originalXDG := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", tempDir)
+	// Set HOME to temp directory to isolate from real config
+	originalHome := os.Getenv("HOME")
+	//nolint:errcheck // Test setup
+	os.Setenv("HOME", tempHome)
 	defer func() {
-		if originalXDG != "" {
-			os.Setenv("XDG_CONFIG_HOME", originalXDG)
-		} else {
-			os.Unsetenv("XDG_CONFIG_HOME")
+		if originalHome != "" {
+			//nolint:errcheck // Test cleanup
+			os.Setenv("HOME", originalHome)
 		}
 	}()
 

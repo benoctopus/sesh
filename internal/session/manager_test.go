@@ -127,13 +127,16 @@ func TestIsInsideTmux(t *testing.T) {
 	originalTmux := os.Getenv("TMUX")
 	defer func() {
 		if originalTmux != "" {
+			//nolint:errcheck // Test cleanup
 			os.Setenv("TMUX", originalTmux)
 		} else {
+			//nolint:errcheck // Test cleanup
 			os.Unsetenv("TMUX")
 		}
 	}()
 
 	t.Run("not inside tmux", func(t *testing.T) {
+		//nolint:errcheck // Test setup
 		os.Unsetenv("TMUX")
 		if IsInsideTmux() {
 			t.Error("IsInsideTmux() = true, want false")
@@ -141,6 +144,7 @@ func TestIsInsideTmux(t *testing.T) {
 	})
 
 	t.Run("inside tmux", func(t *testing.T) {
+		//nolint:errcheck // Test setup
 		os.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
 		if !IsInsideTmux() {
 			t.Error("IsInsideTmux() = false, want true")
@@ -153,13 +157,16 @@ func TestIsInsideZellij(t *testing.T) {
 	originalZellij := os.Getenv("ZELLIJ")
 	defer func() {
 		if originalZellij != "" {
+			//nolint:errcheck // Test cleanup
 			os.Setenv("ZELLIJ", originalZellij)
 		} else {
+			//nolint:errcheck // Test cleanup
 			os.Unsetenv("ZELLIJ")
 		}
 	}()
 
 	t.Run("not inside zellij", func(t *testing.T) {
+		//nolint:errcheck // Test setup
 		os.Unsetenv("ZELLIJ")
 		if IsInsideZellij() {
 			t.Error("IsInsideZellij() = true, want false")
@@ -167,6 +174,7 @@ func TestIsInsideZellij(t *testing.T) {
 	})
 
 	t.Run("inside zellij", func(t *testing.T) {
+		//nolint:errcheck // Test setup
 		os.Setenv("ZELLIJ", "1")
 		if !IsInsideZellij() {
 			t.Error("IsInsideZellij() = false, want true")
@@ -179,13 +187,16 @@ func TestIsInsideScreen(t *testing.T) {
 	originalSTY := os.Getenv("STY")
 	defer func() {
 		if originalSTY != "" {
+			//nolint:errcheck // Test cleanup
 			os.Setenv("STY", originalSTY)
 		} else {
+			//nolint:errcheck // Test cleanup
 			os.Unsetenv("STY")
 		}
 	}()
 
 	t.Run("not inside screen", func(t *testing.T) {
+		//nolint:errcheck // Test setup
 		os.Unsetenv("STY")
 		if IsInsideScreen() {
 			t.Error("IsInsideScreen() = true, want false")
@@ -193,6 +204,7 @@ func TestIsInsideScreen(t *testing.T) {
 	})
 
 	t.Run("inside screen", func(t *testing.T) {
+		//nolint:errcheck // Test setup
 		os.Setenv("STY", "12345.pts-1.hostname")
 		if !IsInsideScreen() {
 			t.Error("IsInsideScreen() = false, want true")
@@ -207,18 +219,24 @@ func TestIsInsideAnySession(t *testing.T) {
 	originalSTY := os.Getenv("STY")
 	defer func() {
 		if originalTmux != "" {
+			//nolint:errcheck // Test cleanup
 			os.Setenv("TMUX", originalTmux)
 		} else {
+			//nolint:errcheck // Test cleanup
 			os.Unsetenv("TMUX")
 		}
 		if originalZellij != "" {
+			//nolint:errcheck // Test cleanup
 			os.Setenv("ZELLIJ", originalZellij)
 		} else {
+			//nolint:errcheck // Test cleanup
 			os.Unsetenv("ZELLIJ")
 		}
 		if originalSTY != "" {
+			//nolint:errcheck // Test cleanup
 			os.Setenv("STY", originalSTY)
 		} else {
+			//nolint:errcheck // Test cleanup
 			os.Unsetenv("STY")
 		}
 	}()

@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/benoctopus/sesh/internal/config"
+	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/models"
 	"github.com/benoctopus/sesh/internal/project"
@@ -41,6 +41,8 @@ func init() {
 }
 
 func runFetch(cmd *cobra.Command, args []string) error {
+	disp := display.NewStderr()
+
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -48,7 +50,7 @@ func runFetch(cmd *cobra.Command, args []string) error {
 	}
 
 	if fetchAll {
-		return fetchAllProjects(cfg)
+		return fetchAllProjects(cfg, disp)
 	}
 
 	// Get current working directory
@@ -63,22 +65,22 @@ func runFetch(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to resolve project")
 	}
 
-	return fetchProject(proj)
+	return fetchProject(proj, disp)
 }
 
-func fetchProject(proj *models.Project) error {
-	fmt.Printf("Fetching %s...\n", proj.Name)
+func fetchProject(proj *models.Project, disp display.Printer) error {
+	disp.Printf("Fetching %s...\n", proj.Name)
 
 	// Run git fetch
 	if err := git.Fetch(proj.LocalPath); err != nil {
 		return eris.Wrap(err, "failed to fetch repository")
 	}
 
-	fmt.Printf("Successfully fetched %s\n", proj.Name)
+	disp.Printf("Successfully fetched %s\n", proj.Name)
 	return nil
 }
 
-func fetchAllProjects(cfg *config.Config) error {
+func fetchAllProjects(cfg *config.Config, disp display.Printer) error {
 	// Discover all projects from filesystem
 	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
 	if err != nil {
@@ -86,33 +88,33 @@ func fetchAllProjects(cfg *config.Config) error {
 	}
 
 	if len(projects) == 0 {
-		fmt.Println("No projects found.")
+		disp.Println("No projects found.")
 		return nil
 	}
 
-	fmt.Printf("Fetching %d project(s)...\n\n", len(projects))
+	disp.Printf("Fetching %d project(s)...\n\n", len(projects))
 
 	successCount := 0
 	failCount := 0
 
 	for _, proj := range projects {
-		fmt.Printf("Fetching %s...", proj.Name)
+		disp.Printf("Fetching %s...", proj.Name)
 
 		if err := git.Fetch(proj.LocalPath); err != nil {
-			fmt.Printf(" failed: %v\n", err)
+			disp.Printf(" failed: %v\n", err)
 			failCount++
 			continue
 		}
 
-		fmt.Printf(" done\n")
+		disp.Printf(" done\n")
 		successCount++
 	}
 
-	fmt.Printf("\nFetched %d/%d project(s) successfully", successCount, len(projects))
+	disp.Printf("\nFetched %d/%d project(s) successfully", successCount, len(projects))
 	if failCount > 0 {
-		fmt.Printf(" (%d failed)", failCount)
+		disp.Printf(" (%d failed)", failCount)
 	}
-	fmt.Println()
+	disp.Println()
 
 	return nil
 }

@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 
 	"github.com/benoctopus/sesh/internal/config"
+	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/fuzzy"
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
-	"github.com/benoctopus/sesh/internal/ui"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
@@ -57,6 +57,8 @@ func init() {
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
+	disp := display.NewStderr()
+
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -134,10 +136,10 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	existingWorktree, err := state.GetWorktree(proj, branch)
 	if err == nil && existingWorktree != nil {
 		// Worktree exists, attach to existing or create new session
-		fmt.Printf(
+		disp.Printf(
 			"%s %s\n",
-			ui.Info("→"),
-			ui.Bold(fmt.Sprintf("Switching to existing worktree: %s", existingWorktree.Path)),
+			disp.InfoText("→"),
+			disp.Bold(fmt.Sprintf("Switching to existing worktree: %s", existingWorktree.Path)),
 		)
 
 		// Generate session name
@@ -155,11 +157,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 
 		// Session doesn't exist, create it
-		fmt.Printf(
+		disp.Printf(
 			"%s Creating %s session %s\n",
-			ui.Info("✨"),
+			disp.InfoText("✨"),
 			sessionMgr.Name(),
-			ui.Bold(sessionName),
+			disp.Bold(sessionName),
 		)
 		if err := sessionMgr.Create(sessionName, existingWorktree.Path); err != nil {
 			return eris.Wrap(err, "failed to create session")
@@ -168,7 +170,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		// Execute startup command if configured
 		startupCmd := getStartupCommand(cfg, existingWorktree.Path)
 		if startupCmd != "" && sessionMgr.Name() == "tmux" {
-			fmt.Printf("%s Running startup command: %s\n", ui.Info("⚙"), ui.Faint(startupCmd))
+			disp.Printf("%s Running startup command: %s\n", disp.InfoText("⚙"), disp.Faint(startupCmd))
 			if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
 				if err := tmuxMgr.SendKeys(sessionName, startupCmd); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
@@ -193,13 +195,13 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	if exists {
 		// Branch exists, create worktree from it
 		// In bare repos (which sesh uses), this automatically sets up tracking to origin
-		fmt.Printf("%s Creating worktree for branch: %s\n", ui.Info("✨"), ui.Bold(branch))
+		disp.Printf("%s Creating worktree for branch: %s\n", disp.InfoText("✨"), disp.Bold(branch))
 		if err := git.CreateWorktree(proj.LocalPath, branch, worktreePath); err != nil {
 			return eris.Wrap(err, "failed to create worktree from branch")
 		}
 	} else {
 		// Branch doesn't exist, create new branch and worktree
-		fmt.Printf("%s Creating new branch and worktree: %s\n", ui.Success("✨"), ui.Bold(branch))
+		disp.Printf("%s Creating new branch and worktree: %s\n", disp.SuccessText("✨"), disp.Bold(branch))
 		if err := git.CreateWorktreeNewBranch(proj.LocalPath, branch, worktreePath, "HEAD"); err != nil {
 			return eris.Wrap(err, "failed to create worktree with new branch")
 		}
@@ -207,20 +209,20 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 
 	// Create session
 	sessionName := workspace.GenerateSessionName(proj.Name, branch)
-	fmt.Printf("%s Creating %s session %s\n", ui.Info("✨"), sessionMgr.Name(), ui.Bold(sessionName))
+	disp.Printf("%s Creating %s session %s\n", disp.InfoText("✨"), sessionMgr.Name(), disp.Bold(sessionName))
 	if err := sessionMgr.Create(sessionName, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to create session")
 	}
 
-	fmt.Printf("\n%s Successfully switched to %s\n", ui.Success("✓"), ui.Bold(branch))
-	fmt.Printf("  %s %s\n", ui.Faint("Worktree:"), worktreePath)
-	fmt.Printf("  %s %s\n", ui.Faint("Session:"), sessionName)
-	fmt.Printf("\n%s Attaching to session...\n", ui.Info("→"))
+	disp.Printf("\n%s Successfully switched to %s\n", disp.SuccessText("✓"), disp.Bold(branch))
+	disp.Printf("  %s %s\n", disp.Faint("Worktree:"), worktreePath)
+	disp.Printf("  %s %s\n", disp.Faint("Session:"), sessionName)
+	disp.Printf("\n%s Attaching to session...\n", disp.InfoText("→"))
 
 	// Execute startup command if configured
 	startupCmd := getStartupCommand(cfg, worktreePath)
 	if startupCmd != "" && sessionMgr.Name() == "tmux" {
-		fmt.Printf("%s Running startup command: %s\n", ui.Info("⚙"), ui.Faint(startupCmd))
+		disp.Printf("%s Running startup command: %s\n", disp.InfoText("⚙"), disp.Faint(startupCmd))
 		if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
 			if err := tmuxMgr.SendKeys(sessionName, startupCmd); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
@@ -256,6 +258,8 @@ func getStartupCommand(cfg *config.Config, worktreePath string) string {
 // cloneRepository clones a repository into the workspace
 // This is used when auto-cloning a repository specified by git URL
 func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
+	disp := display.NewStderr()
+
 	// Ensure workspace directory exists
 	if err := config.EnsureWorkspaceDir(); err != nil {
 		return eris.Wrap(err, "failed to ensure workspace directory")
@@ -266,8 +270,8 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 
 	// Clone repository as bare repo
 	bareRepoPath := filepath.Join(projectPath, ".git")
-	fmt.Printf("%s Cloning %s\n", ui.Info("⬇"), ui.Bold(remoteURL))
-	fmt.Printf("  %s %s\n", ui.Faint("→"), projectPath)
+	disp.Printf("%s Cloning %s\n", disp.InfoText("⬇"), disp.Bold(remoteURL))
+	disp.Printf("  %s %s\n", disp.Faint("→"), projectPath)
 	if err := git.Clone(remoteURL, bareRepoPath); err != nil {
 		return eris.Wrap(err, "failed to clone repository")
 	}
@@ -280,12 +284,12 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 
 	// Create main worktree
 	worktreePath := workspace.GetWorktreePath(projectPath, defaultBranch)
-	fmt.Printf("%s Creating worktree for branch %s\n", ui.Info("✨"), ui.Bold(defaultBranch))
+	disp.Printf("%s Creating worktree for branch %s\n", disp.InfoText("✨"), disp.Bold(defaultBranch))
 	if err := git.CreateWorktree(bareRepoPath, defaultBranch, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to create worktree")
 	}
 
-	fmt.Printf("%s Successfully cloned %s\n", ui.Success("✓"), ui.Bold(projectName))
+	disp.Printf("%s Successfully cloned %s\n", disp.SuccessText("✓"), disp.Bold(projectName))
 
 	return nil
 }

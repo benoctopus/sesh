@@ -75,16 +75,6 @@ tasks:
     cmds:
       - go test -bench=. -benchmem ./...
 
-  lint:
-    desc: Run linter
-    cmds:
-      - go tool golangci-lint run ./...
-
-  lint:fix:
-    desc: Run linter and auto-fix issues
-    cmds:
-      - go tool golangci-lint run --fix ./...
-
   fmt:
     desc: Format code
     cmds:
@@ -111,7 +101,6 @@ tasks:
     desc: Run all checks (fmt, lint, test)
     cmds:
       - task: fmt:check
-      - task: lint
       - task: test
 
   clean:

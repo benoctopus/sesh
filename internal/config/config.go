@@ -358,7 +358,10 @@ func ValidateConfig(config *configFile) error {
 			}
 		}
 		if !valid {
-			return eris.Errorf("invalid session_backend: %s (must be one of: auto, tmux, zellij, screen)", config.SessionBackend)
+			return eris.Errorf(
+				"invalid session_backend: %s (must be one of: auto, tmux, zellij, screen)",
+				config.SessionBackend,
+			)
 		}
 	}
 
@@ -386,6 +389,7 @@ func ValidateConfigFile(configPath string) error {
 	}
 
 	// Validate version (for future compatibility)
+	//nolint:staticcheck // Reserved for future version migration logic
 	if config.Version != "" && config.Version != CurrentConfigVersion {
 		// In the future, we can handle migrations here
 		// For now, we'll just warn but not fail

@@ -19,18 +19,21 @@ func InitDB(dbPath string) (*sql.DB, error) {
 
 	// Enable foreign key constraints
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		//nolint:errcheck // Close in error path
 		db.Close()
 		return nil, eris.Wrap(err, "failed to enable foreign keys")
 	}
 
 	// Test the connection
 	if err := db.Ping(); err != nil {
+		//nolint:errcheck // Close in error path
 		db.Close()
 		return nil, eris.Wrap(err, "failed to ping database")
 	}
 
 	// Run migrations
 	if err := RunMigrations(db); err != nil {
+		//nolint:errcheck // Close in error path
 		db.Close()
 		return nil, eris.Wrap(err, "failed to run migrations")
 	}
@@ -139,6 +142,7 @@ func GetAllProjects(db *sql.DB) ([]*models.Project, error) {
 	if err != nil {
 		return nil, eris.Wrap(err, "failed to query all projects")
 	}
+	//nolint:errcheck // Defer close on rows
 	defer rows.Close()
 
 	var projects []*models.Project
@@ -292,6 +296,7 @@ func GetWorktreesByProject(db *sql.DB, projectID int) ([]*models.Worktree, error
 	if err != nil {
 		return nil, eris.Wrap(err, "failed to query worktrees by project")
 	}
+	//nolint:errcheck // Defer close on rows
 	defer rows.Close()
 
 	var worktrees []*models.Worktree
@@ -419,6 +424,7 @@ func GetAllSessions(db *sql.DB) ([]*models.Session, error) {
 	if err != nil {
 		return nil, eris.Wrap(err, "failed to query all sessions")
 	}
+	//nolint:errcheck // Defer close on rows
 	defer rows.Close()
 
 	var sessions []*models.Session
@@ -461,6 +467,7 @@ func GetAllSessionDetails(db *sql.DB) ([]*models.SessionDetails, error) {
 	if err != nil {
 		return nil, eris.Wrap(err, "failed to query session details")
 	}
+	//nolint:errcheck // Defer close on rows
 	defer rows.Close()
 
 	var details []*models.SessionDetails

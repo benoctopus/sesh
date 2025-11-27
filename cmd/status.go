@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
+	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
@@ -38,6 +39,8 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
+	disp := display.NewStderr()
+
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -67,58 +70,58 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		// Not in a project directory
 		if currentSessionName != "" {
-			fmt.Printf("Current Session: %s\n", currentSessionName)
-			fmt.Println("\nNot currently in a sesh-managed project directory.")
+			disp.Printf("Current Session: %s\n", currentSessionName)
+			disp.Println("\nNot currently in a sesh-managed project directory.")
 			return nil
 		}
-		fmt.Println("Not currently in a sesh-managed project directory.")
-		fmt.Println("Not inside a session.")
-		fmt.Println("\nUse 'sesh list' to see all available sessions.")
+		disp.Println("Not currently in a sesh-managed project directory.")
+		disp.Println("Not inside a session.")
+		disp.Println("\nUse 'sesh list' to see all available sessions.")
 		return nil
 	}
 
 	// Display project information
-	fmt.Printf("Project: %s\n", proj.Name)
-	fmt.Printf("Remote: %s\n", proj.RemoteURL)
+	disp.Printf("Project: %s\n", proj.Name)
+	disp.Printf("Remote: %s\n", proj.RemoteURL)
 
 	// Get current branch
 	gitRoot, err := project.FindGitRoot(cwd)
 	if err == nil {
 		branch, err := git.GetCurrentBranch(gitRoot)
 		if err == nil {
-			fmt.Printf("Branch: %s\n", branch)
+			disp.Printf("Branch: %s\n", branch)
 		}
 
 		// Get worktree info from filesystem state
 		worktree, err := state.GetWorktree(proj, branch)
 		if err == nil {
-			fmt.Printf("Worktree: %s\n", worktree.Path)
-			fmt.Printf("Last Used: %s\n", formatTimeAgo(worktree.LastUsed))
+			disp.Printf("Worktree: %s\n", worktree.Path)
+			disp.Printf("Last Used: %s\n", formatTimeAgo(worktree.LastUsed))
 
 			// Generate session name
 			sessionName := workspace.GenerateSessionName(proj.Name, branch)
-			fmt.Printf("Session: %s\n", sessionName)
+			disp.Printf("Session: %s\n", sessionName)
 
 			// Check if session is running
 			exists, err := sessionMgr.Exists(sessionName)
 			if err == nil {
 				if exists {
-					fmt.Printf("Session Status: Running\n")
+					disp.Printf("Session Status: Running\n")
 				} else {
-					fmt.Printf("Session Status: Not Running\n")
+					disp.Printf("Session Status: Not Running\n")
 				}
 			}
 
 			if currentSessionName != "" && currentSessionName == sessionName {
-				fmt.Printf("(You are currently in this session)\n")
+				disp.Printf("(You are currently in this session)\n")
 			}
 		}
 
 		// Get git status summary
-		fmt.Println()
+		disp.Println()
 		gitStatus, err := getGitStatusSummary(gitRoot)
 		if err == nil {
-			fmt.Printf("Git Status: %s\n", gitStatus)
+			disp.Printf("Git Status: %s\n", gitStatus)
 		}
 	}
 
@@ -129,7 +132,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(worktrees) > 1 {
-		fmt.Println("\nOther Sessions:")
+		disp.Println("\nOther Sessions:")
 		for _, wt := range worktrees {
 			// Skip current worktree
 			if gitRoot != "" {
@@ -153,7 +156,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			fmt.Printf("  %s%s - last used %s\n",
+			disp.Printf("  %s%s - last used %s\n",
 				sessionName,
 				status,
 				formatTimeAgo(wt.LastUsed),

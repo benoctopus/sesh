@@ -8,6 +8,7 @@ import (
 	"os/exec"
 
 	"github.com/benoctopus/sesh/internal/config"
+	"github.com/benoctopus/sesh/internal/display"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 )
@@ -43,6 +44,8 @@ func init() {
 }
 
 func runEdit(cmd *cobra.Command, args []string) error {
+	disp := display.NewStderr()
+
 	// Get config path
 	configPath, err := config.GetConfigPath()
 	if err != nil {
@@ -59,7 +62,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		if err := createDefaultConfig(configPath); err != nil {
 			return eris.Wrap(err, "failed to create default config")
 		}
-		fmt.Printf("Created default config at: %s\n", configPath)
+		disp.Printf("Created default config at: %s\n", configPath)
 	}
 
 	// Get the file hash before editing
@@ -87,20 +90,21 @@ func runEdit(cmd *cobra.Command, args []string) error {
 
 	// Check if file was modified
 	if hashBefore == hashAfter {
-		fmt.Println("No changes made to config")
+		disp.Println("No changes made to config")
 		return nil
 	}
 
 	// Validate the config
 	if err := config.ValidateConfigFile(configPath); err != nil {
-		fmt.Printf("\nConfig validation failed: %+v\n", eris.ToString(err, false))
-		fmt.Printf("\nThe config file has errors. Do you want to:\n")
-		fmt.Printf("  1. Edit again to fix errors\n")
-		fmt.Printf("  2. Discard changes and restore previous version\n")
-		fmt.Printf("  3. Save anyway (not recommended)\n")
-		fmt.Printf("\nChoice (1-3): ")
+		disp.Printf("\nConfig validation failed: %+v\n", eris.ToString(err, false))
+		disp.Printf("\nThe config file has errors. Do you want to:\n")
+		disp.Printf("  1. Edit again to fix errors\n")
+		disp.Printf("  2. Discard changes and restore previous version\n")
+		disp.Printf("  3. Save anyway (not recommended)\n")
+		disp.Printf("\nChoice (1-3): ")
 
 		var choice string
+		//nolint:errcheck // User input errors are not critical
 		fmt.Scanln(&choice)
 
 		switch choice {
@@ -110,18 +114,18 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		case "2":
 			// We can't easily restore without keeping a backup
 			// So we'll just tell the user to manually fix it
-			fmt.Println("\nPlease manually fix the config file or delete it to start over.")
+			disp.Println("\nPlease manually fix the config file or delete it to start over.")
 			return eris.New("config validation failed")
 		case "3":
 			// Save anyway
-			fmt.Println("\nWarning: Saving invalid config. This may cause issues.")
+			disp.Println("\nWarning: Saving invalid config. This may cause issues.")
 			return nil
 		default:
 			return eris.New("invalid choice")
 		}
 	}
 
-	fmt.Printf("Config saved and validated successfully: %s\n", configPath)
+	disp.Printf("Config saved and validated successfully: %s\n", configPath)
 	return nil
 }
 
@@ -156,6 +160,7 @@ func hashFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	//nolint:errcheck // Defer close in read-only operation
 	defer f.Close()
 
 	h := sha256.New()

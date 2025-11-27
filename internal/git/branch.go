@@ -20,6 +20,7 @@ type BranchInfo struct {
 	IsCurrent bool
 }
 
+//nolint:unused // Reserved for future use
 var branchListSpecialChars = regexp.MustCompile(`[+*]`)
 
 // ListLocalBranches lists all local branches in a repository
@@ -124,7 +125,9 @@ func StreamRemoteBranches(ctx context.Context, repoPath string) (io.ReadCloser, 
 
 		// Wait for command to finish when done reading
 		defer func() {
+			//nolint:errcheck // Defer close in cleanup
 			defer writer.Close()
+			//nolint:errcheck // Defer close in cleanup
 			defer stdout.Close()
 
 			var err error

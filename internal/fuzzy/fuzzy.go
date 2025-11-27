@@ -19,7 +19,6 @@ const (
 	FinderNone Finder = "none"
 )
 
-
 // SelectBranchFromReader presents a fuzzy finder interface with streaming input from a reader
 // The reader should output one item per line
 // This starts fzf immediately and pipes data directly for maximum responsiveness

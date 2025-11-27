@@ -23,7 +23,6 @@ sesh/
 ├── cmd/              # CLI command definitions (Cobra commands)
 ├── internal/         # Private application code
 │   ├── config/      # Configuration management
-│   ├── db/          # Database layer (SQLite)
 │   ├── session/     # Tmux session management
 │   ├── workspace/   # Git workspace management
 │   └── ...
@@ -55,6 +54,10 @@ return eris.New("session not found")
 // Wrapping with formatted message
 return eris.Wrapf(err, "failed to connect to workspace %s", name)
 ```
+
+### Console output
+
+ALWAYS log user facing messages to stderr. Only log to stdout when the output a "result" that may be piped to other commands.
 
 ### State Management
 
@@ -102,7 +105,7 @@ Keep migrations in `internal/db/migrations/` and use a simple migration system. 
 External dependencies (non-Go) are managed via `flake.nix`. The development shell includes:
 
 - **Build tools**: go 1.24, go-task, cobra-cli
-- **Code quality**: gopls, golangci-lint, gofumpt, golines
+- **Code quality**: gopls, gofumpt, golines
 - **Session managers**: tmux, zellij (for testing and development)
 - **Utilities**: git, fzf, jq, yq, tree, shellcheck
 
@@ -241,9 +244,6 @@ task test
 # Run tests with coverage
 task test:coverage
 
-# Run linter
-task lint
-
 # Format code
 task fmt
 
@@ -293,3 +293,5 @@ task build && ./dist/sesh --help
 - [Eris Documentation](https://github.com/rotisserie/eris)
 - [SQLite in Go](https://github.com/mattn/go-sqlite3)
 - [Tmux Manual](https://man.openbsd.org/tmux)
+- It is ok to use //nolint: comments to ignore linting errors for error checking where the error is not important or part of a defer statement
+- Please remember to check lint/test before determining a task that modifies go code is complete

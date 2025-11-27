@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
+	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/models"
 	"github.com/benoctopus/sesh/internal/project"
@@ -53,6 +53,8 @@ func init() {
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
+	disp := display.NewStderr()
+
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -72,7 +74,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	if deleteAll {
-		return deleteProject(cfg, proj)
+		return deleteProject(cfg, proj, disp)
 	}
 
 	// Delete specific branch
@@ -81,10 +83,10 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	branch := args[0]
-	return deleteBranch(cfg, proj, branch)
+	return deleteBranch(cfg, proj, branch, disp)
 }
 
-func deleteProject(cfg *config.Config, proj *models.Project) error {
+func deleteProject(cfg *config.Config, proj *models.Project, disp display.Printer) error {
 	// Get all worktrees for this project
 	worktrees, err := state.DiscoverWorktrees(proj)
 	if err != nil {
@@ -93,13 +95,13 @@ func deleteProject(cfg *config.Config, proj *models.Project) error {
 
 	if !deleteForce {
 		// Ask for confirmation
-		fmt.Printf(
+		disp.Printf(
 			"This will delete project '%s' with %d worktree(s) and all associated sessions.\n",
 			proj.Name,
 			len(worktrees),
 		)
-		fmt.Printf("Project path: %s\n", proj.LocalPath)
-		fmt.Print("Are you sure? (yes/no): ")
+		disp.Printf("Project path: %s\n", proj.LocalPath)
+		disp.Print("Are you sure? (yes/no): ")
 
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
@@ -109,7 +111,7 @@ func deleteProject(cfg *config.Config, proj *models.Project) error {
 
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "yes" && response != "y" {
-			fmt.Println("Deletion cancelled.")
+			disp.Println("Deletion cancelled.")
 			return nil
 		}
 	}
@@ -128,33 +130,33 @@ func deleteProject(cfg *config.Config, proj *models.Project) error {
 		// Kill session if it exists
 		exists, err := sessionMgr.Exists(sessionName)
 		if err != nil {
-			fmt.Printf("Warning: failed to check session existence: %v\n", err)
+			disp.Printf("Warning: failed to check session existence: %v\n", err)
 		} else if exists {
-			fmt.Printf("Killing %s session: %s\n", sessionMgr.Name(), sessionName)
+			disp.Printf("Killing %s session: %s\n", sessionMgr.Name(), sessionName)
 			if err := sessionMgr.Delete(sessionName); err != nil {
-				fmt.Printf("Warning: failed to kill session: %v\n", err)
+				disp.Printf("Warning: failed to kill session: %v\n", err)
 			}
 		}
 
 		// Remove worktree
-		fmt.Printf("Removing worktree: %s\n", wt.Path)
+		disp.Printf("Removing worktree: %s\n", wt.Path)
 		if err := git.RemoveWorktree(proj.LocalPath, wt.Path); err != nil {
-			fmt.Printf("Warning: failed to remove worktree: %v\n", err)
+			disp.Printf("Warning: failed to remove worktree: %v\n", err)
 		}
 	}
 
 	// Delete project directory (including bare repo)
 	projectPath := filepath.Dir(proj.LocalPath)
-	fmt.Printf("Removing project directory: %s\n", projectPath)
+	disp.Printf("Removing project directory: %s\n", projectPath)
 	if err := os.RemoveAll(projectPath); err != nil {
 		return eris.Wrap(err, "failed to remove project directory")
 	}
 
-	fmt.Printf("\nSuccessfully deleted project: %s\n", proj.Name)
+	disp.Printf("\nSuccessfully deleted project: %s\n", proj.Name)
 	return nil
 }
 
-func deleteBranch(cfg *config.Config, proj *models.Project, branch string) error {
+func deleteBranch(cfg *config.Config, proj *models.Project, branch string, disp display.Printer) error {
 	// Get worktree from filesystem state
 	worktree, err := state.GetWorktree(proj, branch)
 	if err != nil {
@@ -168,12 +170,12 @@ func deleteBranch(cfg *config.Config, proj *models.Project, branch string) error
 
 	if !deleteForce {
 		// Ask for confirmation
-		fmt.Printf(
+		disp.Printf(
 			"This will delete worktree for branch '%s' and its associated session.\n",
 			branch,
 		)
-		fmt.Printf("Worktree path: %s\n", worktree.Path)
-		fmt.Print("Are you sure? (yes/no): ")
+		disp.Printf("Worktree path: %s\n", worktree.Path)
+		disp.Print("Are you sure? (yes/no): ")
 
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
@@ -183,7 +185,7 @@ func deleteBranch(cfg *config.Config, proj *models.Project, branch string) error
 
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "yes" && response != "y" {
-			fmt.Println("Deletion cancelled.")
+			disp.Println("Deletion cancelled.")
 			return nil
 		}
 	}
@@ -200,20 +202,20 @@ func deleteBranch(cfg *config.Config, proj *models.Project, branch string) error
 	// Kill session if it exists
 	exists, err := sessionMgr.Exists(sessionName)
 	if err != nil {
-		fmt.Printf("Warning: failed to check session existence: %v\n", err)
+		disp.Printf("Warning: failed to check session existence: %v\n", err)
 	} else if exists {
-		fmt.Printf("Killing %s session: %s\n", sessionMgr.Name(), sessionName)
+		disp.Printf("Killing %s session: %s\n", sessionMgr.Name(), sessionName)
 		if err := sessionMgr.Delete(sessionName); err != nil {
-			fmt.Printf("Warning: failed to kill session: %v\n", err)
+			disp.Printf("Warning: failed to kill session: %v\n", err)
 		}
 	}
 
 	// Remove worktree
-	fmt.Printf("Removing worktree: %s\n", worktree.Path)
+	disp.Printf("Removing worktree: %s\n", worktree.Path)
 	if err := git.RemoveWorktree(proj.LocalPath, worktree.Path); err != nil {
 		return eris.Wrap(err, "failed to remove worktree")
 	}
 
-	fmt.Printf("\nSuccessfully deleted worktree for branch: %s\n", branch)
+	disp.Printf("\nSuccessfully deleted worktree for branch: %s\n", branch)
 	return nil
 }

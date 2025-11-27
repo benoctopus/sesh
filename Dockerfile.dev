@@ -1,0 +1,18 @@
+FROM nixos/nix:latest AS builder
+
+RUN echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
+
+
+# Build all dependencies
+
+WORKDIR /workspace
+
+COPY flake.nix flake.lock ./
+RUN nix develop --profile dev --command echo "Built"
+
+COPY go.mod .
+COPY go.sum .
+RUN nix develop --profile dev --command go mod download
+
+ENTRYPOINT [ "nix", "develop", "--profile", "dev" ]
+
