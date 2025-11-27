@@ -12,6 +12,9 @@ import (
 //go:embed migrations/001_initial_schema.sql
 var migration001 string
 
+//go:embed migrations/002_session_history.sql
+var migration002 string
+
 // RunMigrations executes all pending migrations
 func RunMigrations(db *sql.DB) error {
 	// Create schema_migrations table if it doesn't exist
@@ -32,6 +35,7 @@ func RunMigrations(db *sql.DB) error {
 		sql     string
 	}{
 		{version: 1, sql: migration001},
+		{version: 2, sql: migration002},
 	}
 
 	// Apply each migration if not already applied

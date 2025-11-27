@@ -102,6 +102,17 @@ sesh list --projects
 sesh list --json
 ```
 
+### 4. Pop back to previous session
+
+```bash
+# Switch back to the previous session
+sesh pop
+
+# Or use the short aliases
+sesh p
+sesh back
+```
+
 ## Usage
 
 ### Commands
@@ -164,6 +175,23 @@ sesh delete feature-foo
 # Delete entire project
 sesh delete --all
 ```
+
+#### `sesh pop`
+
+Switch to the previous session in history.
+
+The pop command (aliases: `p`, `back`) switches back to the last session you were working on, using the session history stack. This is useful for quickly toggling between two sessions.
+
+```bash
+# Switch to previous session
+sesh pop
+
+# Short aliases
+sesh p
+sesh back
+```
+
+**Note:** Session history is automatically tracked when you switch sessions. The pop command will fail if there's no previous session in the history.
 
 #### `sesh status`
 

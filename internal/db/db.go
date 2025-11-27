@@ -549,3 +549,83 @@ func DeleteSession(db *sql.DB, id int) error {
 
 	return nil
 }
+
+// ==================== Session History Operations ====================
+
+// AddSessionHistory records a session access in the history stack
+func AddSessionHistory(db *sql.DB, sessionName, projectName, branch string) error {
+	_, err := db.Exec(
+		"INSERT INTO session_history (session_name, project_name, branch, accessed_at) VALUES (?, ?, ?, ?)",
+		sessionName, projectName, branch, time.Now(),
+	)
+	if err != nil {
+		return eris.Wrap(err, "failed to insert session history")
+	}
+	return nil
+}
+
+// GetRecentSessionHistory retrieves recent session history (most recent first)
+func GetRecentSessionHistory(db *sql.DB, limit int) ([]*models.SessionHistory, error) {
+	rows, err := db.Query(
+		"SELECT id, session_name, project_name, branch, accessed_at FROM session_history ORDER BY accessed_at DESC LIMIT ?",
+		limit,
+	)
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to query session history")
+	}
+	defer rows.Close()
+
+	var history []*models.SessionHistory
+	for rows.Next() {
+		entry := &models.SessionHistory{}
+		err := rows.Scan(
+			&entry.ID,
+			&entry.SessionName,
+			&entry.ProjectName,
+			&entry.Branch,
+			&entry.AccessedAt,
+		)
+		if err != nil {
+			return nil, eris.Wrap(err, "failed to scan session history row")
+		}
+		history = append(history, entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, eris.Wrap(err, "error iterating session history rows")
+	}
+
+	return history, nil
+}
+
+// GetPreviousSession retrieves the previous session from history (excluding the current session)
+// If currentSessionName is provided, it will skip entries with that name and return the most recent different session
+func GetPreviousSession(db *sql.DB, currentSessionName string) (*models.SessionHistory, error) {
+	var entry models.SessionHistory
+	err := db.QueryRow(
+		"SELECT id, session_name, project_name, branch, accessed_at FROM session_history WHERE session_name != ? ORDER BY accessed_at DESC LIMIT 1",
+		currentSessionName,
+	).Scan(&entry.ID, &entry.SessionName, &entry.ProjectName, &entry.Branch, &entry.AccessedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, eris.New("no previous session found in history")
+	}
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to query previous session")
+	}
+
+	return &entry, nil
+}
+
+// ClearOldSessionHistory removes session history entries older than the specified number of days
+func ClearOldSessionHistory(db *sql.DB, daysToKeep int) error {
+	cutoffDate := time.Now().AddDate(0, 0, -daysToKeep)
+	_, err := db.Exec(
+		"DELETE FROM session_history WHERE accessed_at < ?",
+		cutoffDate,
+	)
+	if err != nil {
+		return eris.Wrap(err, "failed to clear old session history")
+	}
+	return nil
+}
