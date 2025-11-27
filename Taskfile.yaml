@@ -70,6 +70,17 @@ tasks:
     cmds:
       - go test -short ./...
 
+  test:integration:
+    desc: Run integration tests (isolated, does not affect global config)
+    cmds:
+      - go test -tags=integration -v -race ./integration/...
+
+  test:all:
+    desc: Run all tests (unit and integration)
+    cmds:
+      - task: test
+      - task: test:integration
+
   bench:
     desc: Run benchmarks
     cmds:
