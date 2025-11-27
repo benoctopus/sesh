@@ -13,7 +13,7 @@ import (
 
 var popCmd = &cobra.Command{
 	Use:     "pop",
-	Aliases: []string{"p", "back"},
+	Aliases: []string{"p", "back", "last"},
 	Short:   "Switch to the previous session in history",
 	Long: `Switch to the previous session you were working on.
 
@@ -24,7 +24,8 @@ you're actively working on.
 Examples:
   sesh pop         # Switch to previous session
   sesh p           # Short alias
-  sesh back        # Alternative alias`,
+  sesh back        # Alternative alias
+  sesh last        # Another alias`,
 	RunE: runPop,
 }
 

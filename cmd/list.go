@@ -25,6 +25,7 @@ var (
 	listSessions bool
 	listPRs      bool
 	listJSON     bool
+	listPlain    bool
 )
 
 var listCmd = &cobra.Command{
@@ -40,7 +41,8 @@ Examples:
   sesh list --projects         # List only projects
   sesh list --sessions         # List only sessions
   sesh list --pr               # List open pull requests
-  sesh list --json             # Output in JSON format`,
+  sesh list --json             # Output in JSON format
+  sesh list --plain            # Output session names only (for piping to fzf)`,
 	RunE: runList,
 }
 
@@ -50,6 +52,7 @@ func init() {
 	listCmd.Flags().BoolVar(&listSessions, "sessions", false, "Show only sessions (default)")
 	listCmd.Flags().BoolVar(&listPRs, "pr", false, "Show open pull requests")
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output in JSON format")
+	listCmd.Flags().BoolVar(&listPlain, "plain", false, "Output session names only (for piping)")
 }
 
 func runList(cmd *cobra.Command, args []string) error {
@@ -223,6 +226,10 @@ func listAllSessions(cfg *config.Config) error {
 	}
 
 	if len(sessions) == 0 {
+		// For plain output, just return empty (no sessions to list)
+		if listPlain {
+			return nil
+		}
 		disp.Info("No worktrees found.")
 		disp.Printf(
 			"  %s Clone a repository with: %s\n",
@@ -244,6 +251,14 @@ func listAllSessions(cfg *config.Config) error {
 		}
 		// JSON output is pipeable, so use stdout
 		fmt.Println(string(data))
+		return nil
+	}
+
+	if listPlain {
+		// Plain output: just session names, one per line (to stdout for piping)
+		for _, sess := range sessions {
+			fmt.Println(sess.SessionName)
+		}
 		return nil
 	}
 
