@@ -149,21 +149,22 @@ fi
 # Generate changelog/release summary using Claude Code
 log_info "Generating release summary with Claude Code..."
 
-CLAUDE_PROMPT="Review the git changes since ${LAST_TAG:-the beginning} and generate a concise release summary for version $NEW_VERSION.
+CLAUDE_PROMPT="Review the git changes since ${LAST_TAG:-the beginning} and generate a commit message for version $NEW_VERSION release.
 
 Instructions:
 1. Run: git log ${REVISION_RANGE} --oneline --no-decorate
 2. Run: git diff ${REVISION_RANGE} --stat
-3. Analyze the changes and create a brief release summary (2-4 sentences)
-4. Focus on user-facing changes and improvements
-5. Use conventional commit style
-6. Keep it concise and professional
-7. Do NOT include any introductory phrases like 'Here is the summary' or 'Based on the analysis'
-8. Output ONLY the summary text that will be used as the commit and tag message
-9. Start directly with the conventional commit prefix (feat:, fix:, chore:, etc.)
+3. Analyze the changes and create a commit message with:
+   - First line: conventional commit title mentioning version $NEW_VERSION
+   - Blank line
+   - Body: 2-4 sentence summary of user-facing changes
+4. Use conventional commit style (feat:, fix:, chore:, etc.)
+5. Do NOT include any introductory phrases like 'Here is the summary' or 'Based on the analysis'
+6. Output ONLY the commit message text (title + blank line + body)
+7. Start directly with the conventional commit prefix
 
 Example format:
-feat: add new workspace management features
+chore(release): bump version to $NEW_VERSION
 
 This release adds support for multiple workspace backends, improves session switching performance, and fixes several bugs related to git worktree tracking. Enhanced CLI output with tree view for better visualization of project hierarchies."
 
@@ -179,8 +180,8 @@ if ! op run -- claude -p "$CLAUDE_PROMPT" --output-format json >"$CLAUDE_OUTPUT"
 fi
 
 # Parse JSON output to extract the actual message
-# The JSON output has the response in a 'content' or 'text' field
-RELEASE_MESSAGE=$(jq -r '.content // .text // .message // empty' "$CLAUDE_OUTPUT" 2>/dev/null || echo "")
+# The JSON output has the response in the 'result' field
+RELEASE_MESSAGE=$(jq -r '.result // .content // .text // .message // empty' "$CLAUDE_OUTPUT" 2>/dev/null || echo "")
 
 # If jq parsing failed, try to extract from the raw output
 if [[ -z "$RELEASE_MESSAGE" ]]; then
@@ -236,11 +237,9 @@ git add "$FLAKE_FILE"
 
 # Create commit with Claude's message
 log_info "Creating commit..."
-COMMIT_MESSAGE="chore(release): bump version to $NEW_VERSION
 
-$RELEASE_MESSAGE"
-
-if ! git commit -m "$COMMIT_MESSAGE"; then
+# Use Claude's message directly (it already includes the title)
+if ! git commit -m "$RELEASE_MESSAGE"; then
   log_error "Failed to create commit"
   git reset HEAD "$FLAKE_FILE"
   git checkout "$FLAKE_FILE"
@@ -248,8 +247,11 @@ if ! git commit -m "$COMMIT_MESSAGE"; then
 fi
 
 # Create annotated tag with Claude's message
+# Extract just the body for the tag (skip the first line which is the commit title)
+TAG_MESSAGE=$(echo "$RELEASE_MESSAGE" | tail -n +3)
+
 log_info "Creating tag $NEW_TAG..."
-if ! git tag -a "$NEW_TAG" -m "$RELEASE_MESSAGE"; then
+if ! git tag -a "$NEW_TAG" -m "$TAG_MESSAGE"; then
   log_error "Failed to create tag"
   git reset --hard HEAD~1
   exit 1
