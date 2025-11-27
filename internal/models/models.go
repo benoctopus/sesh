@@ -38,3 +38,12 @@ type SessionDetails struct {
 	Worktree *Worktree
 	Project  *Project
 }
+
+// SessionHistory represents an entry in the session access history (for the pop command)
+type SessionHistory struct {
+	ID          int       `json:"id"`
+	SessionName string    `json:"session_name"` // Name of the session (e.g., "repo-branch")
+	ProjectName string    `json:"project_name"` // Project name for reference
+	Branch      string    `json:"branch"`       // Branch name for reference
+	AccessedAt  time.Time `json:"accessed_at"`  // When the session was accessed
+}

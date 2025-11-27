@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
+	"github.com/benoctopus/sesh/internal/db"
 	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/fuzzy"
 	"github.com/benoctopus/sesh/internal/git"
@@ -236,11 +237,15 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 
 		if exists {
+			// Record session history before attaching
+			recordSessionHistory(sessionName, proj.Name, branch)
+
 			// In noninteractive mode or detached mode, don't attach
 			if !tty.IsInteractive() || switchDetach {
 				disp.Printf("%s Session %s already exists\n", disp.SuccessText("✓"), disp.Bold(sessionName))
 				return nil
 			}
+
 			// Attach to existing session
 			return sessionMgr.Attach(sessionName)
 		}
@@ -266,6 +271,9 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 				}
 			}
 		}
+
+		// Record session history before attaching
+		recordSessionHistory(sessionName, proj.Name, branch)
 
 		// In noninteractive mode or detached mode, don't attach
 		if !tty.IsInteractive() || switchDetach {
@@ -324,6 +332,9 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Record session history before attaching
+	recordSessionHistory(sessionName, proj.Name, branch)
+
 	// In noninteractive mode or detached mode, don't attach
 	if !tty.IsInteractive() || switchDetach {
 		return nil
@@ -332,6 +343,32 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	// Attach to session
 	disp.Printf("\n%s Attaching to session...\n", disp.InfoText("→"))
 	return sessionMgr.Attach(sessionName)
+}
+
+// recordSessionHistory records the session access in the database for session history (pop command)
+// This is a best-effort operation - errors are logged but don't fail the command
+func recordSessionHistory(sessionName, projectName, branch string) {
+	// Get database path
+	dbPath, err := config.GetDBPath()
+	if err != nil {
+		// Silently fail - session history is not critical
+		return
+	}
+
+	// Ensure config directory exists (for database file)
+	if err := config.EnsureConfigDir(); err != nil {
+		return
+	}
+
+	// Initialize database
+	database, err := db.InitDB(dbPath)
+	if err != nil {
+		return
+	}
+	defer database.Close()
+
+	// Add session to history
+	_ = db.AddSessionHistory(database, sessionName, projectName, branch)
 }
 
 // getStartupCommand returns the startup command following the priority hierarchy:

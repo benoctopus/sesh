@@ -93,10 +93,13 @@ sesh delete <name>          # Delete a session
 
 ### Database Schema
 
-Keep migrations in `internal/db/migrations/` and use a simple migration system. The database should track:
-- Sessions (name, tmux session name, workspace path, created_at, last_used)
-- Workspaces (path, git remote, branch, tags)
-- Session history and metadata
+Keep migrations in `internal/db/migrations/` and use a simple migration system. The database tracks:
+- Projects (name, remote_url, local_path, created_at, last_fetched)
+- Worktrees (project_id, branch, path, is_main, created_at, last_used)
+- Sessions (worktree_id, tmux_session_name, created_at, last_attached)
+- Session History (session_name, project_name, branch, accessed_at) - for the pop command
+
+**Important:** The session history table is actively used by the switch and pop commands. Session history is recorded automatically when switching sessions and is used by the pop command to navigate back to previous sessions.
 
 ## Development Environment
 
@@ -150,6 +153,40 @@ go mod tidy
 - Use interfaces to allow future extensibility with different session or workspace backends.
 
 ## Common Patterns
+
+### Session History Tracking
+
+Session history is tracked automatically in the database to support the pop command:
+
+```go
+import "github.com/benoctopus/sesh/internal/db"
+import "github.com/benoctopus/sesh/internal/config"
+
+// Recording session history (done automatically in switch command)
+func recordSessionHistory(sessionName, projectName, branch string) {
+    dbPath, _ := config.GetDBPath()
+    config.EnsureConfigDir()
+    database, _ := db.InitDB(dbPath)
+    defer database.Close()
+    db.AddSessionHistory(database, sessionName, projectName, branch)
+}
+
+// Retrieving previous session (used in pop command)
+func getPreviousSession() {
+    dbPath, _ := config.GetDBPath()
+    database, _ := db.InitDB(dbPath)
+    defer database.Close()
+
+    currentSession, _ := sessionMgr.GetCurrentSessionName()
+    previousSession, err := db.GetPreviousSession(database, currentSession)
+    // previousSession contains session_name, project_name, branch
+}
+```
+
+**Pattern Notes:**
+- Session history recording is best-effort (errors don't fail the command)
+- The database is initialized on-demand when needed
+- GetPreviousSession excludes the current session to prevent switching to self
 
 ### Configuration Loading
 
@@ -219,6 +256,9 @@ if err := cmd.Run(); err != nil {
 
 ## Recent Updates (Context for Development)
 
+- **Session history tracking**: Added session history database to track session switches for the pop command
+- **Pop command**: New command to switch back to previous sessions (aliases: p, back)
+- **Database usage**: Now actively uses SQLite database for session history tracking
 - **Nix packaging**: The project is now packaged as a Nix flake and can be installed via `nix profile add`
 - **Worktree improvements**: Fixed upstream tracking and remote branch configuration for bare repositories
 - **Session manager support**: Added zellij support alongside tmux in the development shell
