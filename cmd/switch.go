@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
@@ -50,6 +51,7 @@ Examples:
   sesh sw new-feature                                        # Create new branch automatically
   sesh switch                                                # Interactive fuzzy branch selection
   sesh switch --pr                                           # Interactive PR selection
+  sesh switch --pr 123                                       # Switch to PR #123 directly
   sesh switch --project myproject feature-bar                # Explicit project
   sesh switch -p git@github.com:user/repo.git main           # Auto-clone and switch
   sesh switch -p https://github.com/user/repo.git feature    # Auto-clone HTTPS URL
@@ -124,10 +126,6 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	if switchPR {
 		disp := display.NewStderr()
 
-		if len(args) > 0 {
-			return eris.New("cannot specify branch name with --pr flag")
-		}
-
 		// Get remote URL
 		remoteURL, err := git.GetRemoteURL(proj.LocalPath)
 		if err != nil {
@@ -147,35 +145,51 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		// List open PRs
-		prs, err := provider.ListOpenPRs(cmd.Context(), proj.LocalPath)
-		if err != nil {
-			return eris.Wrap(err, "failed to list pull requests")
-		}
+		var prNum int
 
-		if len(prs) == 0 {
-			return eris.New("no open pull requests found")
-		}
+		// Check if PR number was provided as argument
+		if len(args) > 0 {
+			// Parse PR number from argument
+			prNum, err = strconv.Atoi(args[0])
+			if err != nil {
+				return eris.Wrapf(err, "invalid PR number: %s", args[0])
+			}
+		} else {
+			// No PR number provided - use interactive fuzzy finder
+			if !tty.IsInteractive() {
+				return eris.New("PR number required in noninteractive mode (usage: sesh switch --pr <number>)")
+			}
 
-		// Format PRs for fuzzy finder
-		prChoices := make([]string, len(prs))
-		for i, pullRequest := range prs {
-			prChoices[i] = pr.FormatPRForFuzzyFinder(pullRequest)
-		}
+			// List open PRs
+			prs, err := provider.ListOpenPRs(cmd.Context(), proj.LocalPath)
+			if err != nil {
+				return eris.Wrap(err, "failed to list pull requests")
+			}
 
-		// Create reader from PR choices for fuzzy finder
-		prReader := io.NopCloser(strings.NewReader(strings.Join(prChoices, "\n")))
+			if len(prs) == 0 {
+				return eris.New("no open pull requests found")
+			}
 
-		// Use fuzzy finder to select PR
-		selectedPR, err := fuzzy.SelectBranchFromReader(prReader)
-		if err != nil {
-			return eris.Wrap(err, "failed to select pull request")
-		}
+			// Format PRs for fuzzy finder
+			prChoices := make([]string, len(prs))
+			for i, pullRequest := range prs {
+				prChoices[i] = pr.FormatPRForFuzzyFinder(pullRequest)
+			}
 
-		// Parse PR number from selection
-		prNum, err := pr.ParsePRNumber(selectedPR)
-		if err != nil {
-			return eris.Wrap(err, "failed to parse PR number")
+			// Create reader from PR choices for fuzzy finder
+			prReader := io.NopCloser(strings.NewReader(strings.Join(prChoices, "\n")))
+
+			// Use fuzzy finder to select PR
+			selectedPR, err := fuzzy.SelectBranchFromReader(prReader)
+			if err != nil {
+				return eris.Wrap(err, "failed to select pull request")
+			}
+
+			// Parse PR number from selection
+			prNum, err = pr.ParsePRNumber(selectedPR)
+			if err != nil {
+				return eris.Wrap(err, "failed to parse PR number")
+			}
 		}
 
 		// Get the branch for this PR

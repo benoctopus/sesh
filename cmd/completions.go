@@ -1,13 +1,25 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
 	"github.com/benoctopus/sesh/internal/config"
+	"github.com/benoctopus/sesh/internal/git"
 	"github.com/benoctopus/sesh/internal/models"
+	"github.com/benoctopus/sesh/internal/pr"
+	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
 	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/spf13/cobra"
 )
+
+// completionTimeout is the maximum time to wait for PR completions
+// Shell completions should be fast, so we use a short timeout
+const completionTimeout = 5 * time.Second
 
 // completeProjects returns a completion function that provides project names
 func completeProjects(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -80,11 +92,11 @@ func completeActiveSessions(cmd *cobra.Command, args []string, toComplete string
 
 // completeBranches returns a completion function that provides branch names for the current project
 // It uses the --project flag if provided, otherwise tries to detect from cwd
-// If --pr flag is set, no completions are returned since branch args aren't allowed with --pr
+// If --pr flag is set, returns PR completions instead of branches
 func completeBranches(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	// Check if --pr flag is set (branch args not allowed with --pr)
+	// Check if --pr flag is set - provide PR completions instead
 	if prFlag, _ := cmd.Flags().GetBool("pr"); prFlag {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+		return completePRs(cmd, args, toComplete)
 	}
 
 	cfg, err := config.LoadConfig()
@@ -145,4 +157,64 @@ func getBranchesForProject(proj *models.Project) ([]string, cobra.ShellCompDirec
 	}
 
 	return branches, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completePRs returns a completion function that provides PR numbers with titles
+// This fetches open PRs from GitHub and formats them for shell completion
+func completePRs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Check if --project flag was provided
+	projectName, _ := cmd.Flags().GetString("project")
+
+	// Resolve project
+	proj, err := project.ResolveProject(cfg.WorkspaceDir, projectName, cwd)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Get remote URL
+	remoteURL, err := git.GetRemoteURL(proj.LocalPath)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Create PR provider
+	provider, err := pr.NewProvider(remoteURL)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// List open PRs (with a short timeout for completions)
+	ctx, cancel := context.WithTimeout(context.Background(), completionTimeout)
+	defer cancel()
+
+	prs, err := provider.ListOpenPRs(ctx, proj.LocalPath)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Format PRs for completion: "number\ttitle"
+	// Cobra uses tab separator for completion descriptions
+	var completions []string
+	for _, pullRequest := range prs {
+		completion := fmt.Sprintf("%d\t#%d: %s (@%s)",
+			pullRequest.Number,
+			pullRequest.Number,
+			pullRequest.Title,
+			pullRequest.Author,
+		)
+		completions = append(completions, completion)
+	}
+
+	return completions, cobra.ShellCompDirectiveNoFileComp
 }
