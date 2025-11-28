@@ -26,6 +26,12 @@ const (
 // The reader should output one item per line
 // This starts fzf immediately and pipes data directly for maximum responsiveness
 func SelectBranchFromReader(reader io.ReadCloser) (string, error) {
+	return SelectBranchFromReaderWithPreview(reader, "")
+}
+
+// SelectBranchFromReaderWithPreview presents a fuzzy finder with a preview command
+// The preview command is executed for each selection to show additional information
+func SelectBranchFromReaderWithPreview(reader io.ReadCloser, previewCmd string) (string, error) {
 	if !tty.IsInteractive() {
 		reader.Close() //nolint:errcheck // Error not critical in early return
 		return "", eris.New("interactive selection not available in noninteractive mode")
@@ -36,7 +42,7 @@ func SelectBranchFromReader(reader io.ReadCloser) (string, error) {
 		return "", eris.Wrap(err, "fuzzy finder required for streaming selection")
 	}
 
-	return RunFuzzyFinderFromReader(reader, string(finder))
+	return RunFuzzyFinderFromReaderWithPreview(reader, string(finder), previewCmd)
 }
 
 // DetectFuzzyFinder detects which fuzzy finder is available on the system
@@ -66,11 +72,16 @@ func DetectFuzzyFinder() (Finder, error) {
 }
 
 // createFinderCommand creates the appropriate command for the given fuzzy finder
-func createFinderCommand(finder string) (*exec.Cmd, error) {
+func createFinderCommand(finder string, previewCmd string) (*exec.Cmd, error) {
 	switch Finder(finder) {
 	case FinderFzf:
-		return exec.Command("fzf", "--height", "40%", "--reverse", "--border"), nil
+		args := []string{"--reverse", "--border"}
+		if previewCmd != "" {
+			args = append(args, "--preview", previewCmd)
+		}
+		return exec.Command("fzf", args...), nil
 	case FinderPeco:
+		// Peco doesn't support preview
 		return exec.Command("peco"), nil
 	default:
 		return nil, eris.Errorf("unknown fuzzy finder: %s", finder)
@@ -81,9 +92,16 @@ func createFinderCommand(finder string) (*exec.Cmd, error) {
 // This pipes data directly from the reader to fzf for maximum performance
 // The reader is closed when the function returns
 func RunFuzzyFinderFromReader(reader io.ReadCloser, finder string) (string, error) {
+	return RunFuzzyFinderFromReaderWithPreview(reader, finder, "")
+}
+
+// RunFuzzyFinderFromReaderWithPreview runs a fuzzy finder with a preview command
+// This pipes data directly from the reader to fzf for maximum performance
+// The reader is closed when the function returns
+func RunFuzzyFinderFromReaderWithPreview(reader io.ReadCloser, finder string, previewCmd string) (string, error) {
 	defer reader.Close() //nolint:errcheck
 
-	cmd, err := createFinderCommand(finder)
+	cmd, err := createFinderCommand(finder, previewCmd)
 	if err != nil {
 		return "", err
 	}
@@ -120,7 +138,6 @@ func MultiSelect(items []string, prompt string) ([]string, error) {
 
 	args := []string{
 		"--multi",
-		"--height", "40%",
 		"--reverse",
 		"--border",
 		"--header", "TAB to select/deselect, ENTER to confirm",

@@ -180,7 +180,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 			return eris.Wrap(err, "failed to get PR branch")
 		}
 
-		disp.Printf("%s Switching to PR #%d branch: %s\n", disp.InfoText("→"), prNum, disp.Bold(branch))
+		disp.Printf(
+			"%s Switching to PR #%d branch: %s\n",
+			disp.InfoText("→"),
+			prNum,
+			disp.Bold(branch),
+		)
 	} else if len(args) > 0 {
 		branch = args[0]
 	} else {
@@ -203,12 +208,26 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 			return eris.Wrap(err, "failed to start branch listing")
 		}
 
-		selectedBranch, err := fuzzy.SelectBranchFromReader(branchReader)
+		// Get binary path for preview command
+		bin, err := os.Executable()
 		if err != nil {
-			return eris.Wrap(err, "failed to select branch")
+			// Fallback to simple selection without preview if we can't get binary path
+			selectedBranch, err := fuzzy.SelectBranchFromReader(branchReader)
+			if err != nil {
+				return eris.Wrap(err, "failed to select branch")
+			}
+			branch = selectedBranch
+		} else {
+			// Use preview command with absolute binary path
+			// Pass the project name and branch to the info command
+			// The info command will generate the proper session name internally
+			previewCmd := fmt.Sprintf("%s info --project %s {}", bin, proj.Name)
+			selectedBranch, err := fuzzy.SelectBranchFromReaderWithPreview(branchReader, previewCmd)
+			if err != nil {
+				return eris.Wrap(err, "failed to select branch")
+			}
+			branch = selectedBranch
 		}
-
-		branch = selectedBranch
 	}
 
 	// Initialize session manager
@@ -216,6 +235,8 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return eris.Wrap(err, "failed to initialize session manager")
 	}
+
+	_ = cleanOrphanedSessions(proj, sessionMgr, disp)
 
 	// Check if worktree already exists in filesystem
 	existingWorktree, err := state.GetWorktree(proj, branch)
@@ -242,7 +263,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 
 			// In noninteractive mode or detached mode, don't attach
 			if !tty.IsInteractive() || switchDetach {
-				disp.Printf("%s Session %s already exists\n", disp.SuccessText("✓"), disp.Bold(sessionName))
+				disp.Printf(
+					"%s Session %s already exists\n",
+					disp.SuccessText("✓"),
+					disp.Bold(sessionName),
+				)
 				return nil
 			}
 
@@ -264,7 +289,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		// Execute startup command if configured
 		startupCmd := getStartupCommand(cfg, existingWorktree.Path)
 		if startupCmd != "" && sessionMgr.Name() == "tmux" {
-			disp.Printf("%s Running startup command: %s\n", disp.InfoText("⚙"), disp.Faint(startupCmd))
+			disp.Printf(
+				"%s Running startup command: %s\n",
+				disp.InfoText("⚙"),
+				disp.Faint(startupCmd),
+			)
 			if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
 				if err := tmuxMgr.SendKeys(sessionName, startupCmd); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
@@ -277,7 +306,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 
 		// In noninteractive mode or detached mode, don't attach
 		if !tty.IsInteractive() || switchDetach {
-			disp.Printf("%s Session %s created successfully\n", disp.SuccessText("✓"), disp.Bold(sessionName))
+			disp.Printf(
+				"%s Session %s created successfully\n",
+				disp.SuccessText("✓"),
+				disp.Bold(sessionName),
+			)
 			return nil
 		}
 
@@ -312,7 +345,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 
 	// Create session
 	sessionName := workspace.GenerateSessionName(proj.Name, branch)
-	disp.Printf("%s Creating %s session %s\n", disp.InfoText("✨"), sessionMgr.Name(), disp.Bold(sessionName))
+	disp.Printf(
+		"%s Creating %s session %s\n",
+		disp.InfoText("✨"),
+		sessionMgr.Name(),
+		disp.Bold(sessionName),
+	)
 	if err := sessionMgr.Create(sessionName, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to create session")
 	}
@@ -421,7 +459,11 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 
 	// Create main worktree
 	worktreePath := workspace.GetWorktreePath(projectPath, defaultBranch)
-	disp.Printf("%s Creating worktree for branch %s\n", disp.InfoText("✨"), disp.Bold(defaultBranch))
+	disp.Printf(
+		"%s Creating worktree for branch %s\n",
+		disp.InfoText("✨"),
+		disp.Bold(defaultBranch),
+	)
 	if err := git.CreateWorktree(bareRepoPath, defaultBranch, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to create worktree")
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -180,16 +181,21 @@ func listAllSessions(cfg *config.Config) error {
 		return eris.Wrap(err, "failed to initialize session manager")
 	}
 
-	// Get all running sessions
-	runningSessions, err := state.DiscoverSessions(sessionMgr)
-	if err != nil {
-		return eris.Wrap(err, "failed to discover sessions")
-	}
-
 	// Discover all projects and worktrees
 	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
 	if err != nil {
 		return eris.Wrap(err, "failed to discover projects")
+	}
+
+	// Clean up orphaned sessions for all projects
+	for _, proj := range projects {
+		_ = cleanOrphanedSessions(proj, sessionMgr, disp)
+	}
+
+	// Get all running sessions
+	runningSessions, err := state.DiscoverSessions(sessionMgr)
+	if err != nil {
+		return eris.Wrap(err, "failed to discover sessions")
 	}
 
 	// Detect current project if --current-project flag is set
@@ -236,13 +242,7 @@ func listAllSessions(cfg *config.Config) error {
 			sessionName := workspace.GenerateSessionName(proj.Name, wt.Branch)
 
 			// Check if this session is running
-			isRunning := false
-			for _, runningSess := range runningSessions {
-				if runningSess == sessionName {
-					isRunning = true
-					break
-				}
-			}
+			isRunning := slices.Contains(runningSessions, sessionName)
 
 			// Filter by running state if requested
 			if listRunning && !isRunning {

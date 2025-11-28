@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/benoctopus/sesh/internal/display"
 	"github.com/rotisserie/eris"
@@ -57,13 +59,15 @@ func init() {
 	tmuxCmd.AddCommand(tmuxInstallCmd)
 }
 
+var bin, _ = os.Executable()
+
 const tmuxKeybindingsContent = `# BEGIN sesh tmux integration
 # Fuzzy session switcher with preview (prefix + f)
 bind-key f display-popup -E -w 80% -h 60% \
-  "sesh list --plain | fzf --reverse --preview 'sesh info {}' | xargs -r sesh switch"
+  "{{ .Bin }} switch"
 
 # Quick switch to last/previous session (prefix + L)
-bind-key L run-shell "sesh last"
+bind-key L run-shell "{{ .Bin }} last"
 # END sesh tmux integration
 `
 
@@ -72,14 +76,75 @@ const (
 	seshMarkerEnd   = "# END sesh tmux integration"
 )
 
+// renderKeybindings executes the keybindings template with the binary path
+func renderKeybindings() (string, error) {
+	tmpl, err := template.New("keybindings").Parse(tmuxKeybindingsContent)
+	if err != nil {
+		return "", eris.Wrap(err, "failed to parse keybindings template")
+	}
+
+	var buf bytes.Buffer
+	data := struct {
+		Bin string
+	}{
+		Bin: bin,
+	}
+
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", eris.Wrap(err, "failed to execute keybindings template")
+	}
+
+	return buf.String(), nil
+}
+
+// removeSeshBlock removes the existing sesh keybindings block from the content
+func removeSeshBlock(content string) string {
+	// Find the start of the sesh block
+	startIdx := strings.Index(content, seshMarkerBegin)
+	if startIdx == -1 {
+		return content
+	}
+
+	// Find the end of the sesh block
+	endIdx := strings.Index(content, seshMarkerEnd)
+	if endIdx == -1 {
+		return content
+	}
+
+	// Find the newline after the end marker
+	endIdx = strings.Index(content[endIdx:], "\n")
+	if endIdx == -1 {
+		// End marker is at the end of the file
+		endIdx = len(content)
+	} else {
+		endIdx = endIdx + strings.Index(content, seshMarkerEnd) + 1
+	}
+
+	// Remove any blank lines before the block
+	beforeBlock := content[:startIdx]
+	beforeBlock = strings.TrimRight(beforeBlock, "\n")
+	if len(beforeBlock) > 0 {
+		beforeBlock += "\n"
+	}
+
+	// Combine the content before and after the block
+	return beforeBlock + content[endIdx:]
+}
+
 func runTmuxKeybindings(cmd *cobra.Command, args []string) error {
 	disp := display.NewStderr()
 
 	disp.Printf("\n%s\n", disp.Bold("Recommended tmux keybindings for sesh:"))
 	disp.Println()
 
+	// Render keybindings with actual binary path
+	keybindings, err := renderKeybindings()
+	if err != nil {
+		return err
+	}
+
 	// Print to stdout for easy copying
-	fmt.Print(tmuxKeybindingsContent)
+	fmt.Print(keybindings)
 
 	disp.Println()
 	disp.Info("To install these keybindings automatically, run:")
@@ -97,7 +162,11 @@ func runTmuxInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	disp.Printf("\n%s %s\n", disp.InfoText("→"), disp.Faint(fmt.Sprintf("Using tmux config: %s", tmuxConfPath)))
+	disp.Printf(
+		"\n%s %s\n",
+		disp.InfoText("→"),
+		disp.Faint(fmt.Sprintf("Using tmux config: %s", tmuxConfPath)),
+	)
 
 	// Check if file exists, create if not
 	createNew := false
@@ -112,6 +181,7 @@ func runTmuxInstall(cmd *cobra.Command, args []string) error {
 
 	// Read existing content if file exists
 	var existingContent string
+	replaceExisting := false
 	if !createNew {
 		contentBytes, err := os.ReadFile(tmuxConfPath)
 		if err != nil {
@@ -121,36 +191,65 @@ func runTmuxInstall(cmd *cobra.Command, args []string) error {
 
 		// Check if sesh keybindings are already installed
 		if strings.Contains(existingContent, seshMarkerBegin) {
-			disp.Success("Sesh keybindings are already installed!")
-			disp.Println()
-			disp.Info("To reload your tmux configuration, run:")
-			disp.Printf("  %s\n\n", disp.Bold("tmux source-file ~/.tmux.conf"))
-			return nil
+			replaceExisting = true
+			// Remove the existing sesh block
+			existingContent = removeSeshBlock(existingContent)
 		}
 	}
 
-	// Append keybindings
-	file, err := os.OpenFile(tmuxConfPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	// Render keybindings with actual binary path
+	keybindings, err := renderKeybindings()
 	if err != nil {
-		return eris.Wrapf(err, "failed to open tmux config for writing: %s", tmuxConfPath)
+		return err
 	}
-	defer file.Close() //nolint:errcheck
 
-	// Add a blank line before our section if file has existing content
-	contentToWrite := tmuxKeybindingsContent
-	if !createNew && len(existingContent) > 0 && !strings.HasSuffix(existingContent, "\n\n") {
-		if strings.HasSuffix(existingContent, "\n") {
-			contentToWrite = "\n" + contentToWrite
-		} else {
-			contentToWrite = "\n\n" + contentToWrite
+	var finalContent string
+	if replaceExisting {
+		// When replacing, write the entire updated file content
+		finalContent = existingContent
+		// Add blank line before keybindings if content doesn't end with double newline
+		if len(finalContent) > 0 && !strings.HasSuffix(finalContent, "\n\n") {
+			if strings.HasSuffix(finalContent, "\n") {
+				finalContent += "\n"
+			} else {
+				finalContent += "\n\n"
+			}
+		}
+		finalContent += keybindings
+
+		// Write entire file
+		if err := os.WriteFile(tmuxConfPath, []byte(finalContent), 0o644); err != nil {
+			return eris.Wrap(err, "failed to write keybindings to tmux config")
+		}
+	} else {
+		// When appending, use append mode
+		file, err := os.OpenFile(tmuxConfPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return eris.Wrapf(err, "failed to open tmux config for writing: %s", tmuxConfPath)
+		}
+		defer file.Close() //nolint:errcheck
+
+		// Add a blank line before our section if file has existing content
+		contentToWrite := keybindings
+		if !createNew && len(existingContent) > 0 && !strings.HasSuffix(existingContent, "\n\n") {
+			if strings.HasSuffix(existingContent, "\n") {
+				contentToWrite = "\n" + contentToWrite
+			} else {
+				contentToWrite = "\n\n" + contentToWrite
+			}
+		}
+
+		if _, err := file.WriteString(contentToWrite); err != nil {
+			return eris.Wrap(err, "failed to write keybindings to tmux config")
 		}
 	}
 
-	if _, err := file.WriteString(contentToWrite); err != nil {
-		return eris.Wrap(err, "failed to write keybindings to tmux config")
+	// Display success message
+	if replaceExisting {
+		disp.Success("Successfully updated sesh tmux keybindings!")
+	} else {
+		disp.Success("Successfully installed sesh tmux keybindings!")
 	}
-
-	disp.Success("Successfully installed sesh tmux keybindings!")
 	disp.Println()
 	disp.Printf("%s\n", disp.Bold("Installed keybindings:"))
 	disp.Printf("  %s %s\n", disp.InfoText("prefix + f"), "Fuzzy session switcher with preview")

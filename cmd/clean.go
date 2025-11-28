@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
@@ -214,6 +215,12 @@ func cleanInteractive(
 	}
 
 	disp.Printf("\nSuccessfully deleted %d worktree(s).\n", len(toDelete))
+
+	// Also clean up any orphaned sessions
+	if err := cleanOrphanedSessions(proj, sessionMgr, disp); err != nil {
+		disp.Printf("Warning: failed to clean orphaned sessions: %v\n", err)
+	}
+
 	return nil
 }
 
@@ -290,6 +297,12 @@ func cleanOrphanedWorktrees(
 	}
 
 	disp.Printf("\nSuccessfully deleted %d orphaned worktree(s).\n", len(orphaned))
+
+	// Also clean up any orphaned sessions
+	if err := cleanOrphanedSessions(proj, sessionMgr, disp); err != nil {
+		disp.Printf("Warning: failed to clean orphaned sessions: %v\n", err)
+	}
+
 	return nil
 }
 
@@ -373,6 +386,12 @@ func cleanRemoteDeletedBranches(
 	}
 
 	disp.Printf("\nSuccessfully deleted %d worktree(s) for remote-deleted branches.\n", len(deleted))
+
+	// Also clean up any orphaned sessions
+	if err := cleanOrphanedSessions(proj, sessionMgr, disp); err != nil {
+		disp.Printf("Warning: failed to clean orphaned sessions: %v\n", err)
+	}
+
 	return nil
 }
 
@@ -402,6 +421,79 @@ func deleteWorktreeAndSession(
 	disp.Printf("Removing worktree: %s\n", wt.Path)
 	if err := git.RemoveWorktree(proj.LocalPath, wt.Path); err != nil {
 		return eris.Wrap(err, "failed to remove worktree")
+	}
+
+	return nil
+}
+
+// cleanOrphanedSessions finds and deletes sessions for worktrees that no longer exist
+func cleanOrphanedSessions(
+	proj *models.Project,
+	sessionMgr session.SessionManager,
+	disp display.Printer,
+) error {
+	// Get all existing worktrees
+	worktrees, err := state.DiscoverWorktrees(proj)
+	if err != nil {
+		return eris.Wrap(err, "failed to discover worktrees")
+	}
+
+	// Build a set of existing branches for fast lookup
+	existingBranches := make(map[string]bool)
+	for _, wt := range worktrees {
+		existingBranches[wt.Branch] = true
+	}
+
+	// Get all active sessions
+	sessions, err := sessionMgr.List()
+	if err != nil {
+		return eris.Wrap(err, "failed to list sessions")
+	}
+
+	// Find orphaned sessions (sessions for this project where worktree doesn't exist)
+	repoName := filepath.Base(proj.Name)
+	prefix := repoName + "-"
+
+	var orphanedSessions []string
+	for _, sessionName := range sessions {
+		// Check if this session belongs to this project
+		if !strings.HasPrefix(sessionName, prefix) {
+			continue
+		}
+
+		// Extract branch name from session name
+		branch := strings.TrimPrefix(sessionName, prefix)
+
+		// Check if worktree exists for this branch
+		if !existingBranches[branch] {
+			// This is an orphaned session - worktree no longer exists
+			// We need to check if there's a corresponding unsanitized branch name
+			// since session names use sanitized branch names
+			found := false
+			for existingBranch := range existingBranches {
+				if workspace.SanitizeBranchName(existingBranch) == branch {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				orphanedSessions = append(orphanedSessions, sessionName)
+			}
+		}
+	}
+
+	if len(orphanedSessions) == 0 {
+		return nil
+	}
+
+	// Delete orphaned sessions
+	disp.Printf("Found %d orphaned session(s) without worktrees:\n", len(orphanedSessions))
+	for _, sessionName := range orphanedSessions {
+		disp.Printf("  Killing session: %s\n", sessionName)
+		if err := sessionMgr.Delete(sessionName); err != nil {
+			disp.Printf("Warning: failed to kill session %s: %v\n", sessionName, err)
+		}
 	}
 
 	return nil

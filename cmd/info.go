@@ -11,12 +11,15 @@ import (
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 )
 
+var infoProjectName string
+
 var infoCmd = &cobra.Command{
-	Use:   "info <session-name>",
+	Use:   "info <session-name-or-branch>",
 	Short: "Show detailed information about a session",
 	Long: `Display detailed information about a session for use in fzf preview panes.
 
@@ -29,7 +32,8 @@ This command shows:
 - Worktree path
 
 Examples:
-  sesh info myproject-main         # Show info for a session
+  sesh info myproject-main                     # Show info for a session
+  sesh info --project myproject feature-branch # Show info for project and branch
   sesh list --plain | fzf --preview 'sesh info {}'  # Use in fzf preview`,
 	Args: cobra.ExactArgs(1),
 	RunE: runInfo,
@@ -37,11 +41,10 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(infoCmd)
+	infoCmd.Flags().StringVarP(&infoProjectName, "project", "p", "", "Project name (when passing branch as argument)")
 }
 
 func runInfo(cmd *cobra.Command, args []string) error {
-	sessionName := args[0]
-
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -54,15 +57,30 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to initialize session manager")
 	}
 
-	// Parse session name to get project and branch
-	// Session names are in format: project-branch
-	parts := strings.SplitN(sessionName, "-", 2)
-	if len(parts) != 2 {
-		return eris.Errorf("invalid session name format: %s (expected project-branch)", sessionName)
-	}
+	var projectName, branchName, sessionName string
 
-	projectName := parts[0]
-	branchName := parts[1]
+	// Handle --project flag mode
+	if infoProjectName != "" {
+		// In this mode, args[0] is the branch name
+		branchName = args[0]
+		projectName = infoProjectName
+
+		// Generate session name using the same logic as the switch command
+		sessionName = workspace.GenerateSessionName(projectName, branchName)
+	} else {
+		// Original mode: args[0] is the session name
+		sessionName = args[0]
+
+		// Parse session name to get project and branch
+		// Session names are in format: project-branch
+		parts := strings.SplitN(sessionName, "-", 2)
+		if len(parts) != 2 {
+			return eris.Errorf("invalid session name format: %s (expected project-branch)", sessionName)
+		}
+
+		projectName = parts[0]
+		branchName = parts[1]
+	}
 
 	// Resolve project
 	proj, err := project.ResolveProject(cfg.WorkspaceDir, projectName, "")
@@ -77,26 +95,14 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	}
 
 	var worktreePath string
+	var worktreeExists bool
 	for _, wt := range worktrees {
 		if wt.Branch == branchName {
 			worktreePath = wt.Path
+			worktreeExists = true
 			break
 		}
 	}
-
-	if worktreePath == "" {
-		return eris.Errorf("worktree not found for branch: %s", branchName)
-	}
-
-	// Check if session is running
-	isRunning, err := sessionMgr.Exists(sessionName)
-	if err != nil {
-		return eris.Wrap(err, "failed to check session status")
-	}
-
-	// Get git status
-	gitStatus := getGitStatus(worktreePath)
-	lastCommit := getLastCommit(worktreePath)
 
 	// Display using stdout (for fzf preview)
 	disp := display.NewStdout()
@@ -105,28 +111,59 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	disp.Printf("%s %s\n", disp.Bold("Session:"), sessionName)
 	disp.Printf("%s %s\n", disp.Bold("Project:"), projectName)
 	disp.Printf("%s %s\n", disp.Bold("Branch:"), branchName)
-	disp.Printf("%s %s\n", disp.Bold("Path:"), worktreePath)
 
-	if isRunning {
-		disp.Printf("%s %s\n", disp.Bold("Status:"), disp.SuccessText("● Running"))
-	} else {
-		disp.Printf("%s %s\n", disp.Bold("Status:"), disp.Faint("○ Stopped"))
-	}
+	if worktreeExists {
+		// Worktree exists - show full information
+		disp.Printf("%s %s\n", disp.Bold("Path:"), worktreePath)
 
-	disp.Printf("\n")
-	disp.Printf("%s\n", disp.Bold("Git Status:"))
-	if gitStatus != "" {
-		disp.Print(gitStatus)
-	} else {
-		disp.Printf("%s\n", disp.Faint("  (clean)"))
-	}
+		// Check if session is running
+		isRunning, err := sessionMgr.Exists(sessionName)
+		if err != nil {
+			return eris.Wrap(err, "failed to check session status")
+		}
 
-	disp.Printf("\n")
-	disp.Printf("%s\n", disp.Bold("Last Commit:"))
-	if lastCommit != "" {
-		disp.Print(lastCommit)
+		if isRunning {
+			disp.Printf("%s %s\n", disp.Bold("Status:"), disp.SuccessText("● Running"))
+		} else {
+			disp.Printf("%s %s\n", disp.Bold("Status:"), disp.Faint("○ Stopped"))
+		}
+
+		// Get git status
+		gitStatus := getGitStatus(worktreePath)
+		lastCommit := getLastCommit(worktreePath)
+
+		disp.Printf("\n")
+		disp.Printf("%s\n", disp.Bold("Git Status:"))
+		if gitStatus != "" {
+			disp.Print(gitStatus)
+		} else {
+			disp.Printf("%s\n", disp.Faint("  (clean)"))
+		}
+
+		disp.Printf("\n")
+		disp.Printf("%s\n", disp.Bold("Last Commit:"))
+		if lastCommit != "" {
+			disp.Print(lastCommit)
+		} else {
+			disp.Printf("%s\n", disp.Faint("  (no commits)"))
+		}
 	} else {
-		disp.Printf("%s\n", disp.Faint("  (no commits)"))
+		// Worktree doesn't exist - show remote branch information
+		disp.Printf("%s %s\n", disp.Bold("Status:"), disp.Faint("○ Remote branch (no local worktree)"))
+
+		// Try to get information about the remote branch
+		lastCommit := getRemoteBranchLastCommit(proj.LocalPath, branchName)
+
+		disp.Printf("\n")
+		disp.Printf("%s\n", disp.Bold("Remote Branch Info:"))
+		if lastCommit != "" {
+			disp.Print(lastCommit)
+		} else {
+			disp.Printf("%s\n", disp.Faint("  (no commit information available)"))
+		}
+
+		disp.Printf("\n")
+		disp.Printf("%s\n", disp.Faint("Run 'sesh switch' to create a worktree for this branch."))
 	}
 
 	return nil
@@ -169,6 +206,31 @@ func getLastCommit(worktreePath string) string {
 	output, err := cmd.Output()
 	if err != nil {
 		return ""
+	}
+
+	commitStr := strings.TrimSpace(string(output))
+	if commitStr == "" {
+		return ""
+	}
+
+	return "  " + commitStr + "\n"
+}
+
+// getRemoteBranchLastCommit returns the last commit message for a remote branch
+func getRemoteBranchLastCommit(repoPath, branch string) string {
+	// Try to get the last commit from the remote branch
+	// Use origin/<branch> format
+	remoteBranch := "origin/" + branch
+
+	cmd := exec.Command("git", "-C", repoPath, "log", "-1", remoteBranch, "--pretty=format:%h %s (%ar)")
+	output, err := cmd.Output()
+	if err != nil {
+		// Try without origin/ prefix in case it's a different remote format
+		cmd = exec.Command("git", "-C", repoPath, "log", "-1", branch, "--pretty=format:%h %s (%ar)")
+		output, err = cmd.Output()
+		if err != nil {
+			return ""
+		}
 	}
 
 	commitStr := strings.TrimSpace(string(output))
