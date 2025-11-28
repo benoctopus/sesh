@@ -87,6 +87,9 @@ sesh switch feature-branch
 
 # Create a new branch automatically (if it doesn't exist)
 sesh switch new-feature
+
+# Interactive project and session selection
+sesh switch -p ""
 ```
 
 ### 3. List all sessions
@@ -145,9 +148,22 @@ sesh switch feature-foo
 # Specify project explicitly
 sesh switch --project myproject feature-bar
 
+# Interactive project and session selection
+sesh switch -p ""
+
 # Run a startup command
 sesh switch -c "direnv allow" feature-baz
 ```
+
+**Interactive Project & Session Selection:**
+
+When you use `sesh switch -p ""` (the `-p` flag without a value), sesh provides a two-step interactive selection process:
+
+1. First, select a project from all available projects using fuzzy finding
+2. Then, select a session from that project's active sessions
+3. Finally, attach to the selected session
+
+This is useful when you want to quickly jump between projects and sessions without knowing the exact names.
 
 #### `sesh list`
 
