@@ -162,6 +162,15 @@ sesh list --projects
 
 # Output in JSON format
 sesh list --json
+
+# Filter to sessions for current project only
+sesh list --current-project
+
+# Show only running sessions
+sesh list --running
+
+# Output session names only (useful for piping to fzf)
+sesh list --plain
 ```
 
 #### `sesh delete [branch]`

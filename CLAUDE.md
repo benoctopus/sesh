@@ -256,6 +256,11 @@ if err := cmd.Run(); err != nil {
 
 ## Recent Updates (Context for Development)
 
+- **Tmux Integration Phase 2**: Completed Phase 2 from docs/tmux-integration.md
+  - Added `--current-project` filter to list sessions for the current project only
+  - Added `--running` filter to show only running sessions
+  - Added `--all` filter to show all sessions (running and stopped)
+  - Session history tracking (Phase 2 item 3) was previously implemented with the pop command
 - **Session history tracking**: Added session history database to track session switches for the pop command
 - **Pop command**: New command to switch back to previous sessions (aliases: p, back)
 - **Database usage**: Now actively uses SQLite database for session history tracking

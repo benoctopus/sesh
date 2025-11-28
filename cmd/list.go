@@ -21,11 +21,14 @@ import (
 )
 
 var (
-	listProjects bool
-	listSessions bool
-	listPRs      bool
-	listJSON     bool
-	listPlain    bool
+	listProjects       bool
+	listSessions       bool
+	listPRs            bool
+	listJSON           bool
+	listPlain          bool
+	listCurrentProject bool
+	listRunning        bool
+	listAll            bool
 )
 
 var listCmd = &cobra.Command{
@@ -37,12 +40,15 @@ var listCmd = &cobra.Command{
 By default, shows all sessions with their project and branch information.
 
 Examples:
-  sesh list                    # List all sessions
-  sesh list --projects         # List only projects
-  sesh list --sessions         # List only sessions
-  sesh list --pr               # List open pull requests
-  sesh list --json             # Output in JSON format
-  sesh list --plain            # Output session names only (for piping to fzf)`,
+  sesh list                        # List all sessions
+  sesh list --projects             # List only projects
+  sesh list --sessions             # List only sessions
+  sesh list --pr                   # List open pull requests
+  sesh list --json                 # Output in JSON format
+  sesh list --plain                # Output session names only (for piping to fzf)
+  sesh list --current-project      # List sessions for current project only
+  sesh list --running              # List only running sessions
+  sesh list --all                  # List all sessions (running and stopped)`,
 	RunE: runList,
 }
 
@@ -53,6 +59,9 @@ func init() {
 	listCmd.Flags().BoolVar(&listPRs, "pr", false, "Show open pull requests")
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output in JSON format")
 	listCmd.Flags().BoolVar(&listPlain, "plain", false, "Output session names only (for piping)")
+	listCmd.Flags().BoolVar(&listCurrentProject, "current-project", false, "Filter to sessions for current project")
+	listCmd.Flags().BoolVar(&listRunning, "running", false, "Show only running sessions")
+	listCmd.Flags().BoolVar(&listAll, "all", false, "Show all sessions (running and stopped)")
 }
 
 func runList(cmd *cobra.Command, args []string) error {
@@ -183,6 +192,22 @@ func listAllSessions(cfg *config.Config) error {
 		return eris.Wrap(err, "failed to discover projects")
 	}
 
+	// Detect current project if --current-project flag is set
+	var currentProjectName string
+	if listCurrentProject {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return eris.Wrap(err, "failed to get current working directory")
+		}
+
+		// Resolve project from current directory
+		currentProj, err := project.ResolveProject(cfg.WorkspaceDir, "", cwd)
+		if err != nil {
+			return eris.Wrap(err, "failed to resolve current project - are you in a sesh workspace?")
+		}
+		currentProjectName = currentProj.Name
+	}
+
 	type SessionDetail struct {
 		SessionName  string
 		ProjectName  string
@@ -196,6 +221,11 @@ func listAllSessions(cfg *config.Config) error {
 
 	// Build session details by matching worktrees to running sessions
 	for _, proj := range projects {
+		// Filter by current project if requested
+		if listCurrentProject && proj.Name != currentProjectName {
+			continue
+		}
+
 		worktrees, err := state.DiscoverWorktrees(proj)
 		if err != nil {
 			continue
@@ -212,6 +242,11 @@ func listAllSessions(cfg *config.Config) error {
 					isRunning = true
 					break
 				}
+			}
+
+			// Filter by running state if requested
+			if listRunning && !isRunning {
+				continue
 			}
 
 			sessions = append(sessions, SessionDetail{
