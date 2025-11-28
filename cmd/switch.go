@@ -162,10 +162,22 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		// Create reader from PR choices for fuzzy finder
 		prReader := io.NopCloser(strings.NewReader(strings.Join(prChoices, "\n")))
 
-		// Use fuzzy finder to select PR
-		selectedPR, err := fuzzy.SelectBranchFromReader(prReader)
+		// Get binary path for preview command
+		var selectedPR string
+		bin, err := os.Executable()
 		if err != nil {
-			return eris.Wrap(err, "failed to select pull request")
+			// Fallback to simple selection without preview if we can't get binary path
+			selectedPR, err = fuzzy.SelectBranchFromReader(prReader)
+			if err != nil {
+				return eris.Wrap(err, "failed to select pull request")
+			}
+		} else {
+			// Use preview command with absolute binary path
+			previewCmd := fmt.Sprintf("%s info --pr {}", bin)
+			selectedPR, err = fuzzy.SelectBranchFromReaderWithPreview(prReader, previewCmd)
+			if err != nil {
+				return eris.Wrap(err, "failed to select pull request")
+			}
 		}
 
 		// Parse PR number from selection

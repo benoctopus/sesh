@@ -66,6 +66,10 @@ const tmuxKeybindingsContent = `# BEGIN sesh tmux integration
 bind-key f display-popup -E -w 80% -h 60% \
   "{{ .Bin }} switch"
 
+# Fuzzy pull request switcher with preview (prefix + F)
+bind-key F display-popup -E -w 80% -h 60% \
+  "{{ .Bin }} switch --pr"
+
 # Quick switch to last/previous session (prefix + L)
 bind-key L run-shell "{{ .Bin }} last"
 # END sesh tmux integration

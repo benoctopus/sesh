@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/benoctopus/sesh/internal/config"
 	"github.com/benoctopus/sesh/internal/display"
+	"github.com/benoctopus/sesh/internal/git"
+	"github.com/benoctopus/sesh/internal/pr"
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
 	"github.com/benoctopus/sesh/internal/state"
@@ -16,7 +19,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var infoProjectName string
+var (
+	infoProjectName string
+	infoPRMode      bool
+)
 
 var infoCmd = &cobra.Command{
 	Use:   "info <session-name-or-branch>",
@@ -34,6 +40,7 @@ This command shows:
 Examples:
   sesh info myproject-main                     # Show info for a session
   sesh info --project myproject feature-branch # Show info for project and branch
+  sesh info --pr "#123│Title│..."              # Show info for a pull request
   sesh list --plain | fzf --preview 'sesh info {}'  # Use in fzf preview`,
 	Args: cobra.ExactArgs(1),
 	RunE: runInfo,
@@ -42,9 +49,15 @@ Examples:
 func init() {
 	rootCmd.AddCommand(infoCmd)
 	infoCmd.Flags().StringVarP(&infoProjectName, "project", "p", "", "Project name (when passing branch as argument)")
+	infoCmd.Flags().BoolVar(&infoPRMode, "pr", false, "Show pull request info instead of session info")
 }
 
 func runInfo(cmd *cobra.Command, args []string) error {
+	// Handle PR mode
+	if infoPRMode {
+		return runPRInfo(cmd, args)
+	}
+
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -108,13 +121,13 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	disp := display.NewStdout()
 
 	disp.Printf("\n")
-	disp.Printf("%s %s\n", disp.Bold("Session:"), sessionName)
-	disp.Printf("%s %s\n", disp.Bold("Project:"), projectName)
-	disp.Printf("%s %s\n", disp.Bold("Branch:"), branchName)
+	disp.Printf("%s %s\n", disp.InfoText("Session:"), disp.Bold(sessionName))
+	disp.Printf("%s %s\n", disp.InfoText("Project:"), projectName)
+	disp.Printf("%s %s\n", disp.InfoText("Branch:"), disp.Bold(branchName))
 
 	if worktreeExists {
 		// Worktree exists - show full information
-		disp.Printf("%s %s\n", disp.Bold("Path:"), worktreePath)
+		disp.Printf("%s %s\n", disp.InfoText("Path:"), disp.Faint(worktreePath))
 
 		// Check if session is running
 		isRunning, err := sessionMgr.Exists(sessionName)
@@ -123,9 +136,9 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		}
 
 		if isRunning {
-			disp.Printf("%s %s\n", disp.Bold("Status:"), disp.SuccessText("● Running"))
+			disp.Printf("%s %s\n", disp.InfoText("Status:"), disp.SuccessText("● Running"))
 		} else {
-			disp.Printf("%s %s\n", disp.Bold("Status:"), disp.Faint("○ Stopped"))
+			disp.Printf("%s %s\n", disp.InfoText("Status:"), disp.Faint("○ Stopped"))
 		}
 
 		// Get git status
@@ -137,7 +150,7 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		if gitStatus != "" {
 			disp.Print(gitStatus)
 		} else {
-			disp.Printf("%s\n", disp.Faint("  (clean)"))
+			disp.Printf("%s\n", disp.SuccessText("  ✓ Clean"))
 		}
 
 		disp.Printf("\n")
@@ -149,7 +162,7 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		// Worktree doesn't exist - show remote branch information
-		disp.Printf("%s %s\n", disp.Bold("Status:"), disp.Faint("○ Remote branch (no local worktree)"))
+		disp.Printf("%s %s\n", disp.InfoText("Status:"), disp.WarningText("○ Remote branch (no local worktree)"))
 
 		// Try to get information about the remote branch
 		lastCommit := getRemoteBranchLastCommit(proj.LocalPath, branchName)
@@ -163,7 +176,7 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		}
 
 		disp.Printf("\n")
-		disp.Printf("%s\n", disp.Faint("Run 'sesh switch' to create a worktree for this branch."))
+		disp.Printf("%s\n", disp.InfoText("→ Run 'sesh switch' to create a worktree for this branch."))
 	}
 
 	return nil
@@ -239,4 +252,103 @@ func getRemoteBranchLastCommit(repoPath, branch string) string {
 	}
 
 	return "  " + commitStr + "\n"
+}
+
+// runPRInfo displays detailed information about a pull request
+func runPRInfo(cmd *cobra.Command, args []string) error {
+	prSelection := args[0]
+
+	// Parse PR number from selection
+	prNum, err := pr.ParsePRNumber(prSelection)
+	if err != nil {
+		return eris.Wrap(err, "failed to parse PR number")
+	}
+
+	// Load configuration to get workspace
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return eris.Wrap(err, "failed to load configuration")
+	}
+
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return eris.Wrap(err, "failed to get current working directory")
+	}
+
+	// Resolve project
+	proj, err := project.ResolveProject(cfg.WorkspaceDir, "", cwd)
+	if err != nil {
+		return eris.Wrap(err, "failed to resolve project")
+	}
+
+	// Get remote URL
+	remoteURL, err := git.GetRemoteURL(proj.LocalPath)
+	if err != nil {
+		return eris.Wrap(err, "failed to get remote URL")
+	}
+
+	// Create PR provider
+	provider, err := pr.NewProvider(remoteURL)
+	if err != nil {
+		return eris.Wrap(err, "failed to create PR provider")
+	}
+
+	// Get PR details
+	pullRequest, err := provider.GetPR(cmd.Context(), proj.LocalPath, prNum)
+	if err != nil {
+		return eris.Wrap(err, "failed to get pull request details")
+	}
+
+	// Display PR information
+	disp := display.NewStdout()
+
+	disp.Printf("\n")
+	disp.Printf("%s %s\n", disp.InfoText("PR:"), disp.Bold(fmt.Sprintf("#%d", pullRequest.Number)))
+	disp.Printf("%s %s\n", disp.InfoText("Title:"), disp.Bold(pullRequest.Title))
+	disp.Printf("%s %s\n", disp.InfoText("Author:"), pullRequest.Author)
+	disp.Printf("%s %s → %s\n", disp.InfoText("Branch:"), disp.Bold(pullRequest.Branch), pullRequest.BaseBranch)
+	disp.Printf("%s %s\n", disp.InfoText("State:"), getPRStateDisplay(pullRequest.State, disp))
+
+	if len(pullRequest.Labels) > 0 {
+		disp.Printf("%s %s\n", disp.InfoText("Labels:"), strings.Join(pullRequest.Labels, ", "))
+	}
+
+	disp.Printf("\n")
+	if pullRequest.Description != "" {
+		disp.Printf("%s\n", disp.Bold("Description:"))
+		// Show first few lines of description
+		lines := strings.Split(pullRequest.Description, "\n")
+		maxLines := 5
+		if len(lines) > maxLines {
+			lines = lines[:maxLines]
+			for _, line := range lines {
+				disp.Printf("  %s\n", line)
+			}
+			disp.Printf("  %s\n", disp.Faint("..."))
+		} else {
+			for _, line := range lines {
+				disp.Printf("  %s\n", line)
+			}
+		}
+	}
+
+	disp.Printf("\n")
+	disp.Printf("%s\n", disp.Faint(pullRequest.URL))
+
+	return nil
+}
+
+// getPRStateDisplay returns a colorized state display
+func getPRStateDisplay(state string, disp display.Printer) string {
+	switch strings.ToLower(state) {
+	case "open":
+		return disp.SuccessText("● Open")
+	case "closed":
+		return disp.ErrorText("● Closed")
+	case "merged":
+		return disp.InfoText("● Merged")
+	default:
+		return disp.Faint("○ " + state)
+	}
 }
