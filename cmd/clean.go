@@ -306,8 +306,9 @@ func cleanRemoteDeletedBranches(
 		return eris.Wrap(err, "failed to discover worktrees")
 	}
 
-	// Get all remote branches
-	remoteBranches, err := git.ListRemoteBranches(proj.LocalPath)
+	// Get all branches that actually exist on the remote server
+	disp.Println("Checking remote branches...")
+	remoteBranches, err := git.ListActualRemoteBranches(proj.LocalPath)
 	if err != nil {
 		return eris.Wrap(err, "failed to list remote branches")
 	}

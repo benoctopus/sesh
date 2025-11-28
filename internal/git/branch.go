@@ -79,6 +79,44 @@ func ListRemoteBranches(repoPath string) ([]string, error) {
 	return parseGitBranchList(string(output)), nil
 }
 
+// ListActualRemoteBranches queries the remote server to get the actual list of branches
+// that exist on the remote. This is useful for checking if branches have been deleted remotely.
+// Returns branch names without the "refs/heads/" prefix.
+func ListActualRemoteBranches(repoPath string) ([]string, error) {
+	cmd := exec.Command("git", "-C", repoPath, "ls-remote", "--heads", "origin")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to list remote branches from origin")
+	}
+
+	var branches []string
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		// Format: <commit-hash>\trefs/heads/<branch-name>
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		ref := fields[1]
+		// Remove "refs/heads/" prefix to get branch name
+		if branchName, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
+			branches = append(branches, branchName)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, eris.Wrap(err, "failed to parse ls-remote output")
+	}
+
+	return branches, nil
+}
+
 // StreamRemoteBranches returns a reader that streams branch names and the cleanup function
 // The reader will output one branch name per line as git produces them
 // The caller must call cleanup() when done to ensure the process terminates
