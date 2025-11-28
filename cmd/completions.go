@@ -80,7 +80,13 @@ func completeActiveSessions(cmd *cobra.Command, args []string, toComplete string
 
 // completeBranches returns a completion function that provides branch names for the current project
 // It uses the --project flag if provided, otherwise tries to detect from cwd
+// If --pr flag is set, no completions are returned since branch args aren't allowed with --pr
 func completeBranches(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Check if --pr flag is set (branch args not allowed with --pr)
+	if prFlag, _ := cmd.Flags().GetBool("pr"); prFlag {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
