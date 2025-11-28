@@ -38,6 +38,10 @@ func init() {
 	rootCmd.AddCommand(fetchCmd)
 	fetchCmd.Flags().BoolVar(&fetchAll, "all", false, "Fetch all projects")
 	fetchCmd.Flags().StringVarP(&fetchProjectName, "project", "p", "", "Specify project explicitly")
+
+	// Register completions
+	_ = fetchCmd.RegisterFlagCompletionFunc("project", completeProjects)
+	fetchCmd.ValidArgsFunction = completeProjects
 }
 
 func runFetch(cmd *cobra.Command, args []string) error {

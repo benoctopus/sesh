@@ -58,6 +58,9 @@ func init() {
 		BoolVar(&cleanRemoteDeleted, "remote-deleted", false, "Delete local worktrees for remote-deleted branches")
 	cleanCmd.Flags().BoolVarP(&cleanForce, "force", "f", false, "Skip confirmation prompts")
 	cleanCmd.Flags().StringVarP(&cleanProjectName, "project", "p", "", "Specify project explicitly")
+
+	// Register completions
+	_ = cleanCmd.RegisterFlagCompletionFunc("project", completeProjects)
 }
 
 func runClean(cmd *cobra.Command, args []string) error {
