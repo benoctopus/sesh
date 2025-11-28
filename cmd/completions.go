@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/benoctopus/sesh/internal/config"
@@ -20,6 +21,21 @@ import (
 // completionTimeout is the maximum time to wait for PR completions
 // Shell completions should be fast, so we use a short timeout
 const completionTimeout = 5 * time.Second
+
+// ghCLICheck caches the result of the gh CLI check so it only runs once per process
+var (
+	ghCLICheckOnce   sync.Once
+	ghCLICheckResult error
+)
+
+// checkGHCLICached checks if gh CLI is installed and authenticated, caching the result.
+// This ensures the check only runs once per process, even if called multiple times.
+func checkGHCLICached() error {
+	ghCLICheckOnce.Do(func() {
+		ghCLICheckResult = pr.CheckGHCLI()
+	})
+	return ghCLICheckResult
+}
 
 // completeProjects returns a completion function that provides project names
 func completeProjects(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -192,6 +208,13 @@ func completePRs(cmd *cobra.Command, args []string, toComplete string) ([]string
 	provider, err := pr.NewProvider(remoteURL)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Check if gh CLI is installed and authenticated (for GitHub)
+	if provider.Name() == "github" {
+		if err := checkGHCLICached(); err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
 	}
 
 	// List open PRs (with a short timeout for completions)

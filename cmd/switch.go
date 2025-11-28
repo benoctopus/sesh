@@ -139,8 +139,9 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 
 		// Check if gh CLI is installed and authenticated (for GitHub)
+		// Uses cached check so it only runs once per process
 		if provider.Name() == "github" {
-			if err := pr.CheckGHCLI(); err != nil {
+			if err := checkGHCLICached(); err != nil {
 				return err
 			}
 		}
