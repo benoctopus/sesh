@@ -401,6 +401,77 @@ sesh supports multiple session manager backends:
 session_backend: tmux  # or: zellij, screen, auto, none
 ```
 
+## Tmux Integration
+
+sesh provides deep integration with tmux through keybindings and menu systems for seamless session switching.
+
+### Installing Tmux Keybindings
+
+sesh can automatically install recommended keybindings to your tmux configuration:
+
+```bash
+# View recommended keybindings
+sesh tmux keybindings
+
+# Automatically install to tmux.conf
+sesh tmux install
+```
+
+This adds the following keybindings to your `~/.tmux.conf`:
+
+- **prefix + f**: Fuzzy session switcher with preview (using fzf)
+- **prefix + L**: Switch to last/previous session
+
+After installation, reload your tmux configuration:
+
+```bash
+tmux source-file ~/.tmux.conf
+```
+
+### Manual Keybinding Setup
+
+If you prefer to customize the keybindings, add these to your `~/.tmux.conf`:
+
+```bash
+# Fuzzy session switcher with preview (prefix + f)
+bind-key f display-popup -E -w 80% -h 60% \
+  "sesh list --plain | fzf --reverse --preview 'sesh info {}' | xargs -r sesh switch"
+
+# Quick switch to last/previous session (prefix + L)
+bind-key L run-shell "sesh last"
+
+# Session switcher for current project only (prefix + p)
+bind-key p display-popup -E -w 60% -h 40% \
+  "sesh list --current-project --plain | fzf --reverse | xargs -r sesh switch"
+```
+
+### Native Tmux Menu
+
+For a keyboard-driven session switcher without fzf dependency:
+
+```bash
+# Generate tmux display-menu command
+sesh tmux menu
+```
+
+Add to your tmux.conf:
+
+```bash
+# Session menu (prefix + m)
+bind-key m run-shell "sesh tmux menu"
+```
+
+**Note:** The native menu is best for ~20 or fewer sessions. For larger projects, use the fzf-based popup switcher.
+
+### Integration Features
+
+- **Plain output mode**: `sesh list --plain` outputs session names one per line for piping to fzf or other tools
+- **Session info**: `sesh info <session>` displays detailed session information for use in fzf preview panes
+- **Current project filter**: `sesh list --current-project` shows only sessions for the active project
+- **Running session filter**: `sesh list --running` shows only active sessions
+
+For more details on tmux integration, see [docs/tmux-integration.md](docs/tmux-integration.md).
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

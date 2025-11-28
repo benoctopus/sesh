@@ -256,6 +256,11 @@ if err := cmd.Run(); err != nil {
 
 ## Recent Updates (Context for Development)
 
+- **Tmux Integration Phase 3**: Completed Phase 3 from docs/tmux-integration.md
+  - Added `sesh tmux keybindings` command to generate recommended tmux.conf snippets
+  - Added `sesh tmux install` command to automatically install keybindings to tmux.conf
+  - Added `sesh tmux menu` command for native tmux display-menu generation
+  - Updated README with comprehensive tmux integration documentation
 - **Tmux Integration Phase 2**: Completed Phase 2 from docs/tmux-integration.md
   - Added `--current-project` filter to list sessions for the current project only
   - Added `--running` filter to show only running sessions

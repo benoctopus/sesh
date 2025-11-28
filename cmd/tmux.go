@@ -8,7 +8,11 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/benoctopus/sesh/internal/config"
 	"github.com/benoctopus/sesh/internal/display"
+	"github.com/benoctopus/sesh/internal/session"
+	"github.com/benoctopus/sesh/internal/state"
+	"github.com/benoctopus/sesh/internal/workspace"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 )
@@ -53,10 +57,32 @@ Examples:
 	RunE: runTmuxInstall,
 }
 
+var tmuxMenuCmd = &cobra.Command{
+	Use:   "menu",
+	Short: "Generate tmux display-menu for session switching",
+	Long: `Generate a tmux display-menu command for native session switching.
+
+This command outputs a tmux display-menu command that can be used in keybindings
+for a keyboard-driven session switcher without requiring fzf.
+
+Example usage in tmux.conf:
+  bind-key m run-shell "sesh tmux menu"
+
+The menu provides:
+  - Single-key selection (numbered 0-9, a-z)
+  - Native tmux look and feel
+  - No external dependencies (fzf not required)
+
+Note: Best for projects with ~20 or fewer sessions. For larger projects,
+use the fzf-based popup switcher (prefix + f) instead.`,
+	RunE: runTmuxMenu,
+}
+
 func init() {
 	rootCmd.AddCommand(tmuxCmd)
 	tmuxCmd.AddCommand(tmuxKeybindingsCmd)
 	tmuxCmd.AddCommand(tmuxInstallCmd)
+	tmuxCmd.AddCommand(tmuxMenuCmd)
 }
 
 var bin, _ = os.Executable()
@@ -296,4 +322,125 @@ func findTmuxConf() (string, error) {
 
 	// Default to ~/.tmux.conf (will be created)
 	return candidates[0], nil
+}
+
+func runTmuxMenu(cmd *cobra.Command, args []string) error {
+	// Import required packages (will be added to import block)
+	// We need to get the list of sessions similar to the list command
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return eris.Wrap(err, "failed to load configuration")
+	}
+
+	// Get session list using internal packages
+	sessions, err := getSessionsForMenu(cfg)
+	if err != nil {
+		return eris.Wrap(err, "failed to get sessions")
+	}
+
+	if len(sessions) == 0 {
+		// If no sessions, show a message menu
+		fmt.Println("tmux display-menu -T 'No Sessions' 'No sessions found' '' ''")
+		return nil
+	}
+
+	// Generate tmux display-menu command
+	menuCmd := generateTmuxMenuCommand(sessions)
+	fmt.Println(menuCmd)
+
+	return nil
+}
+
+type menuSession struct {
+	Name    string
+	Project string
+	Branch  string
+}
+
+func getSessionsForMenu(cfg *config.Config) ([]menuSession, error) {
+	// Import required internal packages
+	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to initialize session manager")
+	}
+
+	// Get all running sessions
+	runningSessions, err := state.DiscoverSessions(sessionMgr)
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to discover sessions")
+	}
+
+	// Discover all projects and worktrees
+	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
+	if err != nil {
+		return nil, eris.Wrap(err, "failed to discover projects")
+	}
+
+	var sessions []menuSession
+
+	// Build session list
+	for _, proj := range projects {
+		worktrees, err := state.DiscoverWorktrees(proj)
+		if err != nil {
+			continue
+		}
+
+		for _, wt := range worktrees {
+			// Generate expected session name
+			sessionName := workspace.GenerateSessionName(proj.Name, wt.Branch)
+
+			// Only include running sessions in the menu
+			isRunning := false
+			for _, runningSess := range runningSessions {
+				if runningSess == sessionName {
+					isRunning = true
+					break
+				}
+			}
+
+			if isRunning {
+				sessions = append(sessions, menuSession{
+					Name:    sessionName,
+					Project: proj.Name,
+					Branch:  wt.Branch,
+				})
+			}
+		}
+	}
+
+	return sessions, nil
+}
+
+func generateTmuxMenuCommand(sessions []menuSession) string {
+	// Keys for menu items: 0-9, then a-z
+	keys := "0123456789abcdefghijklmnopqrstuvwxyz"
+
+	var menuItems []string
+	menuItems = append(menuItems, "tmux display-menu -T 'Switch Session'")
+
+	for i, sess := range sessions {
+		if i >= len(keys) {
+			// Limit to number of available keys
+			break
+		}
+
+		key := string(keys[i])
+		label := fmt.Sprintf("%s (%s)", sess.Branch, sess.Project)
+
+		// Escape single quotes in the label and command
+		label = strings.ReplaceAll(label, "'", "'\\''")
+		sessionName := strings.ReplaceAll(sess.Name, "'", "'\\''")
+
+		// Format: "label" "key" "command"
+		menuItem := fmt.Sprintf("  '%s' '%s' 'run-shell \"sesh switch %s\"'",
+			label, key, sessionName)
+		menuItems = append(menuItems, menuItem)
+	}
+
+	// Add separator and cancel option
+	menuItems = append(menuItems, "  '' '' ''") // separator
+	menuItems = append(menuItems, "  'Cancel' 'q' ''")
+
+	return strings.Join(menuItems, " \\\n")
 }
