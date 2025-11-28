@@ -401,6 +401,70 @@ sesh supports multiple session manager backends:
 session_backend: tmux  # or: zellij, screen, auto, none
 ```
 
+### Tmux Integration
+
+sesh provides seamless tmux integration with convenient keybindings for quick session switching.
+
+#### Installing Tmux Keybindings
+
+The easiest way to set up tmux integration is using the install command:
+
+```bash
+sesh tmux install
+```
+
+This will automatically:
+1. Detect your tmux configuration file location (`~/.tmux.conf` or `~/.config/tmux/tmux.conf`)
+2. Add the recommended keybindings if not already present
+3. Update existing keybindings if they were previously installed
+
+After installation, reload your tmux configuration:
+
+```bash
+tmux source-file ~/.tmux.conf
+```
+
+#### Available Keybindings
+
+Once installed, you'll have the following keybindings available:
+
+| Keybinding | Action | Description |
+|------------|--------|-------------|
+| `prefix + f` | Session switcher | Opens a fuzzy finder popup to switch between branches with preview |
+| `prefix + F` | PR switcher | Opens a fuzzy finder popup to switch to pull request branches with preview |
+| `prefix + L` | Last session | Quickly switch to the previous session |
+
+**Note:** `prefix` is your tmux prefix key (default: `Ctrl-b`)
+
+#### Preview Your Keybindings
+
+To see the keybindings without installing them:
+
+```bash
+sesh tmux keybindings
+```
+
+This outputs the keybinding configuration that you can manually copy to your `tmux.conf` if preferred.
+
+#### Manual Installation
+
+If you prefer to manually add keybindings to your `tmux.conf`:
+
+```tmux
+# Fuzzy session switcher with preview (prefix + f)
+bind-key f display-popup -E -w 80% -h 60% \
+  "/path/to/sesh switch"
+
+# Fuzzy pull request switcher with preview (prefix + F)
+bind-key F display-popup -E -w 80% -h 60% \
+  "/path/to/sesh switch --pr"
+
+# Quick switch to last/previous session (prefix + L)
+bind-key L run-shell "/path/to/sesh last"
+```
+
+Replace `/path/to/sesh` with the output of `which sesh`.
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

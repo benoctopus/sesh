@@ -230,6 +230,107 @@ if err := cmd.Run(); err != nil {
 }
 ```
 
+### Tmux Integration Patterns
+
+The `sesh tmux` command suite provides seamless tmux integration with automatic keybinding installation.
+
+#### Template-Based Keybinding Configuration
+
+Keybindings use Go templates to inject the absolute path to the sesh executable:
+
+```go
+const tmuxKeybindingsContent = `# BEGIN sesh tmux integration
+# Fuzzy session switcher with preview (prefix + f)
+bind-key f display-popup -E -w 80% -h 60% \
+  "{{ .Bin }} switch"
+
+# Fuzzy pull request switcher with preview (prefix + F)
+bind-key F display-popup -E -w 80% -h 60% \
+  "{{ .Bin }} switch --pr"
+
+# Quick switch to last/previous session (prefix + L)
+bind-key L run-shell "{{ .Bin }} last"
+# END sesh tmux integration
+`
+
+func renderKeybindings() (string, error) {
+    tmpl, err := template.New("keybindings").Parse(tmuxKeybindingsContent)
+    if err != nil {
+        return "", eris.Wrap(err, "failed to parse keybindings template")
+    }
+
+    bin, _ := os.Executable()
+    var buf bytes.Buffer
+    data := struct{ Bin string }{Bin: bin}
+
+    if err := tmpl.Execute(&buf, data); err != nil {
+        return "", eris.Wrap(err, "failed to execute keybindings template")
+    }
+
+    return buf.String(), nil
+}
+```
+
+#### Intelligent Keybinding Replacement
+
+The install command intelligently replaces existing sesh keybindings using marker comments:
+
+```go
+const (
+    seshMarkerBegin = "# BEGIN sesh tmux integration"
+    seshMarkerEnd   = "# END sesh tmux integration"
+)
+
+func removeSeshBlock(content string) string {
+    startIdx := strings.Index(content, seshMarkerBegin)
+    if startIdx == -1 {
+        return content
+    }
+
+    endIdx := strings.Index(content, seshMarkerEnd)
+    if endIdx == -1 {
+        return content
+    }
+
+    // Find newline after end marker and remove entire block
+    // ... (implementation details)
+}
+```
+
+This ensures that:
+- First-time installation appends keybindings
+- Repeat installations update the absolute path if binary location changed
+- No duplicate keybinding blocks are created
+
+#### Tmux Configuration File Detection
+
+The install command automatically detects the tmux configuration location:
+
+```go
+func findTmuxConf() (string, error) {
+    homeDir, _ := os.UserHomeDir()
+
+    candidates := []string{
+        filepath.Join(homeDir, ".tmux.conf"),
+        filepath.Join(homeDir, ".config", "tmux", "tmux.conf"),
+    }
+
+    // Support TMUX_CONF environment variable override
+    if envPath := os.Getenv("TMUX_CONF"); envPath != "" {
+        candidates = append([]string{envPath}, candidates...)
+    }
+
+    // Return first existing file or default to ~/.tmux.conf
+    for _, path := range candidates {
+        if _, err := os.Stat(path); err == nil {
+            return path, nil
+        }
+    }
+
+    return candidates[0], nil
+}
+```
+
 ## Testing
 
 - Write unit tests for business logic
@@ -256,6 +357,22 @@ if err := cmd.Run(); err != nil {
 
 ## Recent Updates (Context for Development)
 
+- **Tmux Keybinding Installation**: Added `sesh tmux` command suite for tmux integration
+  - `sesh tmux install` - automatically installs keybindings to tmux.conf
+  - `sesh tmux keybindings` - displays recommended keybindings
+  - Keybindings include fuzzy session switcher (`prefix + f`), PR switcher (`prefix + F`), and last session (`prefix + L`)
+  - Supports both `~/.tmux.conf` and `~/.config/tmux/tmux.conf` locations
+  - Uses template rendering to inject absolute path to sesh executable
+  - Intelligently replaces existing keybindings on repeat invocations
+- **Preview Support**: Added preview functionality to fuzzy finders
+  - Branch selection shows preview with session info, git status, and last commit
+  - PR selection shows preview with PR details, description, and metadata
+  - Preview commands use absolute binary paths for reliability
+  - Info command supports both `--project` flag and `--pr` flag for different preview modes
+- **Orphaned Session Cleanup**: Enhanced clean command to remove orphaned sessions
+  - Automatically cleans sessions for deleted worktrees
+  - Handles branch name sanitization when matching sessions to worktrees
+  - Integrated into all clean modes (interactive, orphaned, remote-deleted)
 - **Tmux Integration Phase 2**: Completed Phase 2 from docs/tmux-integration.md
   - Added `--current-project` filter to list sessions for the current project only
   - Added `--running` filter to show only running sessions

@@ -36,13 +36,6 @@ return eris.New("session not found")
 return eris.Wrapf(err, "failed to connect to workspace %s", name)
 ```
 
-### Database
-
-- Use `modernc.org/sqlite` as the SQLite driver with blank import: `import _ "modernc.org/sqlite"`
-- Enable foreign key constraints: `PRAGMA foreign_keys = ON`
-- Use transactions for migrations
-- Database location: `{OS_CONFIG_DIR}/sesh/sesh.db` (use `os.UserConfigDir()`)
-- Keep migrations in `internal/db/migrations/`
 
 ### Build and Test Commands
 
