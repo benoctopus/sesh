@@ -12,6 +12,7 @@ import (
 	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/fuzzy"
 	"github.com/benoctopus/sesh/internal/git"
+	"github.com/benoctopus/sesh/internal/models"
 	"github.com/benoctopus/sesh/internal/pr"
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
@@ -83,6 +84,13 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return eris.Wrap(err, "failed to get current working directory")
+	}
+
+	// Handle special case: -p flag provided but no project name or branch specified
+	// This triggers interactive project selection followed by session selection
+	projectFlagSet := cmd.Flags().Changed("project")
+	if projectFlagSet && switchProjectName == "" && len(args) == 0 && !switchPR {
+		return runInteractiveProjectSessionSelection(cfg)
 	}
 
 	// Handle auto-clone if a git URL is provided
@@ -483,4 +491,102 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 	disp.Printf("%s Successfully cloned %s\n", disp.SuccessText("✓"), disp.Bold(projectName))
 
 	return nil
+}
+
+// runInteractiveProjectSessionSelection handles the case when -p flag is provided with no value
+// It fuzzy searches projects first, then sessions, and attaches to the selected session
+func runInteractiveProjectSessionSelection(cfg *config.Config) error {
+	disp := display.NewStderr()
+
+	// Check if running in interactive mode
+	if !tty.IsInteractive() {
+		return eris.New("interactive mode not available in noninteractive environment")
+	}
+
+	// Step 1: Fuzzy search projects
+	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
+	if err != nil {
+		return eris.Wrap(err, "failed to discover projects")
+	}
+
+	if len(projects) == 0 {
+		return eris.New("no projects found in workspace")
+	}
+
+	// Create list of project names for fuzzy finder
+	projectNames := make([]string, len(projects))
+	for i, proj := range projects {
+		projectNames[i] = proj.Name
+	}
+
+	// Create reader from project names
+	projectReader := io.NopCloser(strings.NewReader(strings.Join(projectNames, "\n")))
+
+	// Use fuzzy finder to select project
+	disp.Printf("%s Select a project:\n", disp.InfoText("→"))
+	selectedProjectName, err := fuzzy.SelectBranchFromReader(projectReader)
+	if err != nil {
+		return eris.Wrap(err, "failed to select project")
+	}
+
+	// Find the selected project
+	var selectedProject *models.Project
+	for _, proj := range projects {
+		if proj.Name == selectedProjectName {
+			selectedProject = proj
+			break
+		}
+	}
+
+	if selectedProject == nil {
+		return eris.Errorf("selected project not found: %s", selectedProjectName)
+	}
+
+	// Step 2: Fuzzy search sessions
+	// Initialize session manager
+	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
+	if err != nil {
+		return eris.Wrap(err, "failed to initialize session manager")
+	}
+
+	// Get all sessions
+	sessions, err := sessionMgr.List()
+	if err != nil {
+		return eris.Wrap(err, "failed to list sessions")
+	}
+
+	// Filter sessions that belong to the selected project
+	// Session names follow the pattern: {project-name}_{branch}
+	projectPrefix := selectedProject.Name + "_"
+	var projectSessions []string
+	for _, sess := range sessions {
+		if strings.HasPrefix(sess, projectPrefix) {
+			projectSessions = append(projectSessions, sess)
+		}
+	}
+
+	if len(projectSessions) == 0 {
+		return eris.Errorf("no active sessions found for project %s", selectedProject.Name)
+	}
+
+	// Create reader from session names
+	sessionReader := io.NopCloser(strings.NewReader(strings.Join(projectSessions, "\n")))
+
+	// Use fuzzy finder to select session
+	disp.Printf("%s Select a session:\n", disp.InfoText("→"))
+	selectedSession, err := fuzzy.SelectBranchFromReader(sessionReader)
+	if err != nil {
+		return eris.Wrap(err, "failed to select session")
+	}
+
+	// Extract branch name from session name
+	// Session format: {project-name}_{branch}
+	branch := strings.TrimPrefix(selectedSession, projectPrefix)
+
+	// Record session history
+	recordSessionHistory(selectedSession, selectedProject.Name, branch)
+
+	// Step 3: Attach to the selected session
+	disp.Printf("\n%s Attaching to session %s...\n", disp.InfoText("→"), disp.Bold(selectedSession))
+	return sessionMgr.Attach(selectedSession)
 }
