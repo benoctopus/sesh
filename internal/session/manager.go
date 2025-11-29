@@ -49,12 +49,29 @@ const (
 	BackendScreen BackendType = "screen"
 	BackendNone   BackendType = "none"
 	BackendAuto   BackendType = "auto"
+
+	// Editor backends (VS Code and Cursor)
+	BackendCodeOpen        BackendType = "code:open"
+	BackendCodeWorkspace   BackendType = "code:workspace"
+	BackendCodeReplace     BackendType = "code:replace"
+	BackendCursorOpen      BackendType = "cursor:open"
+	BackendCursorWorkspace BackendType = "cursor:workspace"
+	BackendCursorReplace   BackendType = "cursor:replace"
 )
 
 // NewSessionManager creates a new session manager based on the specified backend
 // If backend is "auto", it will auto-detect the available backend
 func NewSessionManager(backend string) (SessionManager, error) {
 	backendType := BackendType(backend)
+
+	// Check for editor backends first (code:* and cursor:*)
+	if IsEditorBackend(backend) {
+		command, mode, err := ParseEditorBackend(backend)
+		if err != nil {
+			return nil, err
+		}
+		return NewEditorManager(command, mode), nil
+	}
 
 	// Auto-detect if requested
 	if backendType == BackendAuto || backendType == "" {
@@ -72,9 +89,6 @@ func NewSessionManager(backend string) (SessionManager, error) {
 		return NewZellijManager(), nil
 	case BackendNone:
 		return NewNoneManager(), nil
-	// Future backends can be added here:
-	// case BackendScreen:
-	//     return NewScreenManager(), nil
 	default:
 		return nil, eris.Errorf("unsupported session backend: %s", backend)
 	}
@@ -119,6 +133,18 @@ func GetBackendName(backend BackendType) string {
 		return "GNU Screen"
 	case BackendNone:
 		return "None (no session manager)"
+	case BackendCodeOpen:
+		return "VS Code (new window)"
+	case BackendCodeWorkspace:
+		return "VS Code (add to workspace)"
+	case BackendCodeReplace:
+		return "VS Code (replace window)"
+	case BackendCursorOpen:
+		return "Cursor (new window)"
+	case BackendCursorWorkspace:
+		return "Cursor (add to workspace)"
+	case BackendCursorReplace:
+		return "Cursor (replace window)"
 	default:
 		return "Unknown"
 	}

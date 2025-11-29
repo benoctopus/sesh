@@ -12,7 +12,7 @@ import (
 // Config holds the application configuration
 type Config struct {
 	WorkspaceDir   string `yaml:"workspace_dir"`
-	SessionBackend string `yaml:"session_backend"` // "tmux", "zellij", "screen", "auto"
+	SessionBackend string `yaml:"session_backend"` // "tmux", "zellij", "screen", "auto", or editor backends like "code:open", "cursor:replace"
 	StartupCommand string `yaml:"startup_command"` // Command to run on session creation
 	FuzzyFinder    string `yaml:"fuzzy_finder"`    // "fzf", "peco", "auto"
 }
@@ -349,7 +349,12 @@ func ValidateConfig(config *configFile) error {
 
 	// Validate session backend
 	if config.SessionBackend != "" && config.SessionBackend != "auto" {
-		validBackends := []string{"tmux", "zellij", "screen"}
+		validBackends := []string{
+			"tmux", "zellij", "screen",
+			// Editor backends
+			"code:open", "code:workspace", "code:replace",
+			"cursor:open", "cursor:workspace", "cursor:replace",
+		}
 		valid := false
 		for _, backend := range validBackends {
 			if config.SessionBackend == backend {
@@ -359,7 +364,7 @@ func ValidateConfig(config *configFile) error {
 		}
 		if !valid {
 			return eris.Errorf(
-				"invalid session_backend: %s (must be one of: auto, tmux, zellij, screen)",
+				"invalid session_backend: %s (must be one of: auto, tmux, zellij, screen, code:open, code:workspace, code:replace, cursor:open, cursor:workspace, cursor:replace)",
 				config.SessionBackend,
 			)
 		}
