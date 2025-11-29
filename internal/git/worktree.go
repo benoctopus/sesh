@@ -135,6 +135,57 @@ func CreateWorktreeNewBranch(repoPath, branch, worktreePath, startPoint string) 
 	return nil
 }
 
+// CreateWorktreeFromRemoteBranch creates a new worktree for a branch that exists on the remote
+// but not locally. This creates a local branch tracking the remote branch.
+// This is equivalent to: git worktree add -b <branch> <path> origin/<branch>
+func CreateWorktreeFromRemoteBranch(repoPath, branch, worktreePath string) error {
+	cmd := exec.Command(
+		"git",
+		"-C",
+		repoPath,
+		"worktree",
+		"add",
+		"-b",
+		branch,
+		worktreePath,
+		"origin/"+branch,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to create worktree from remote branch: %s", string(output))
+	}
+
+	// Set up tracking to origin/<branch>
+	// Configure the tracking since git worktree add doesn't always set it up correctly
+	cmd = exec.Command(
+		"git",
+		"-C",
+		worktreePath,
+		"config",
+		"branch."+branch+".remote",
+		"origin",
+	)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to set branch remote: %s", string(output))
+	}
+
+	cmd = exec.Command(
+		"git",
+		"-C",
+		worktreePath,
+		"config",
+		"branch."+branch+".merge",
+		"refs/heads/"+branch,
+	)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return eris.Wrapf(err, "failed to set branch merge: %s", string(output))
+	}
+
+	return nil
+}
+
 // CreateWorktreeFromRef creates a new worktree from a specific ref (commit, tag, etc.)
 func CreateWorktreeFromRef(repoPath, ref, worktreePath string) error {
 	cmd := exec.Command(
