@@ -295,6 +295,38 @@ func DoesBranchExist(repoPath, branch string) (bool, bool, error) {
 	return false, false, eris.Wrap(err, "failed to check branch existence")
 }
 
+// DoesBranchExistRemotely checks if a branch exists at refs/remotes/origin/<branch>
+// This is useful for bare repositories where remote branches are fetched to refs/remotes/origin/*
+func DoesBranchExistRemotely(repoPath, branch string) (bool, error) {
+	// Check if branch exists at refs/remotes/origin/<branch>
+	cmd := exec.Command(
+		"git",
+		"-C",
+		repoPath,
+		"show-ref",
+		"--verify",
+		"--quiet",
+		"refs/remotes/origin/"+branch,
+	)
+
+	err := cmd.Run()
+	if err == nil {
+		// Branch exists at refs/remotes/origin/<branch>
+		return true, nil
+	}
+
+	// Check if it's a non-existent ref (exit code 1) or an actual error
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		if exitErr.ExitCode() == 1 {
+			// Branch doesn't exist remotely
+			return false, nil
+		}
+	}
+
+	// Some other error occurred
+	return false, eris.Wrap(err, "failed to check remote branch existence")
+}
+
 // GetCurrentBranch retrieves the current branch name in a git repository
 func GetCurrentBranch(repoPath string) (string, error) {
 	cmd := exec.Command("git", "-C", repoPath, "branch", "--show-current")
