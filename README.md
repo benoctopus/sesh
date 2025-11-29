@@ -89,7 +89,7 @@ sesh switch feature-branch
 sesh switch new-feature
 
 # Interactive project and session selection
-sesh switch -p ""
+sesh switch --select-project
 ```
 
 ### 3. List all sessions
@@ -149,7 +149,7 @@ sesh switch feature-foo
 sesh switch --project myproject feature-bar
 
 # Interactive project and session selection
-sesh switch -p ""
+sesh switch --select-project
 
 # Run a startup command
 sesh switch -c "direnv allow" feature-baz
@@ -157,7 +157,7 @@ sesh switch -c "direnv allow" feature-baz
 
 **Interactive Project & Session Selection:**
 
-When you use `sesh switch -p ""` (the `-p` flag without a value), sesh provides a two-step interactive selection process:
+When you use `sesh switch --select-project`, sesh provides a two-step interactive selection process:
 
 1. First, select a project from all available projects using fuzzy finding
 2. Then, select a session from that project's active sessions

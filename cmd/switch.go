@@ -28,6 +28,7 @@ var (
 	switchStartupCommand string
 	switchPR             bool
 	switchDetach         bool
+	switchSelectProject  bool
 )
 
 var switchCmd = &cobra.Command{
@@ -46,11 +47,14 @@ If the branch doesn't exist locally or remotely, a new branch will be created au
 If a git URL is provided for the --project flag and the repository has not been cloned yet,
 it will be automatically cloned before switching to the branch.
 
+Use --select-project to interactively select a project and then a session from that project.
+
 Examples:
   sesh switch feature-foo                                    # Switch to existing branch
   sesh sw new-feature                                        # Create new branch automatically
   sesh switch                                                # Interactive fuzzy branch selection
   sesh switch --pr                                           # Interactive PR selection
+  sesh switch --select-project                               # Interactive project and session selection
   sesh switch --project myproject feature-bar                # Explicit project
   sesh switch -p git@github.com:user/repo.git main           # Auto-clone and switch
   sesh switch -p https://github.com/user/repo.git feature    # Auto-clone HTTPS URL
@@ -69,6 +73,8 @@ func init() {
 		BoolVar(&switchPR, "pr", false, "Select from open pull requests")
 	switchCmd.Flags().
 		BoolVarP(&switchDetach, "detach", "d", false, "Create session without attaching to it")
+	switchCmd.Flags().
+		BoolVar(&switchSelectProject, "select-project", false, "Interactively select project then session")
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -86,10 +92,8 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return eris.Wrap(err, "failed to get current working directory")
 	}
 
-	// Handle special case: -p flag provided but no project name or branch specified
-	// This triggers interactive project selection followed by session selection
-	projectFlagSet := cmd.Flags().Changed("project")
-	if projectFlagSet && switchProjectName == "" && len(args) == 0 && !switchPR {
+	// Handle special case: --select-project flag triggers interactive project and session selection
+	if switchSelectProject {
 		return runInteractiveProjectSessionSelection(cfg)
 	}
 
@@ -493,7 +497,7 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 	return nil
 }
 
-// runInteractiveProjectSessionSelection handles the case when -p flag is provided with no value
+// runInteractiveProjectSessionSelection handles the case when --select-project flag is provided
 // It fuzzy searches projects first, then sessions, and attaches to the selected session
 func runInteractiveProjectSessionSelection(cfg *config.Config) error {
 	disp := display.NewStderr()
