@@ -12,6 +12,7 @@ import (
 	"github.com/benoctopus/sesh/internal/display"
 	"github.com/benoctopus/sesh/internal/fuzzy"
 	"github.com/benoctopus/sesh/internal/git"
+	"github.com/benoctopus/sesh/internal/models"
 	"github.com/benoctopus/sesh/internal/pr"
 	"github.com/benoctopus/sesh/internal/project"
 	"github.com/benoctopus/sesh/internal/session"
@@ -27,6 +28,7 @@ var (
 	switchStartupCommand string
 	switchPR             bool
 	switchDetach         bool
+	switchSelectProject  bool
 )
 
 var switchCmd = &cobra.Command{
@@ -45,11 +47,14 @@ If the branch doesn't exist locally or remotely, a new branch will be created au
 If a git URL is provided for the --project flag and the repository has not been cloned yet,
 it will be automatically cloned before switching to the branch.
 
+Use --select-project to interactively select a project and then a session from that project.
+
 Examples:
   sesh switch feature-foo                                    # Switch to existing branch
   sesh sw new-feature                                        # Create new branch automatically
   sesh switch                                                # Interactive fuzzy branch selection
   sesh switch --pr                                           # Interactive PR selection
+  sesh switch --select-project                               # Interactive project and session selection
   sesh switch --project myproject feature-bar                # Explicit project
   sesh switch -p git@github.com:user/repo.git main           # Auto-clone and switch
   sesh switch -p https://github.com/user/repo.git feature    # Auto-clone HTTPS URL
@@ -68,6 +73,8 @@ func init() {
 		BoolVar(&switchPR, "pr", false, "Select from open pull requests")
 	switchCmd.Flags().
 		BoolVarP(&switchDetach, "detach", "d", false, "Create session without attaching to it")
+	switchCmd.Flags().
+		BoolVar(&switchSelectProject, "select-project", false, "Interactively select project then session")
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -83,6 +90,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return eris.Wrap(err, "failed to get current working directory")
+	}
+
+	// Handle special case: --select-project flag triggers interactive project and session selection
+	if switchSelectProject {
+		return runInteractiveProjectSessionSelection(cmd, cfg)
 	}
 
 	// Handle auto-clone if a git URL is provided
@@ -497,4 +509,244 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 	disp.Printf("%s Successfully cloned %s\n", disp.SuccessText("✓"), disp.Bold(projectName))
 
 	return nil
+}
+
+// runInteractiveProjectSessionSelection handles the case when --select-project flag is provided
+// It fuzzy searches projects first, then branches, then proceeds with normal switch behavior
+func runInteractiveProjectSessionSelection(cmd *cobra.Command, cfg *config.Config) error {
+	disp := display.NewStderr()
+
+	// Check if running in interactive mode
+	if !tty.IsInteractive() {
+		return eris.New("interactive mode not available in noninteractive environment")
+	}
+
+	// Step 1: Discover all projects
+	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
+	if err != nil {
+		return eris.Wrap(err, "failed to discover projects")
+	}
+
+	if len(projects) == 0 {
+		return eris.New("no projects found in workspace")
+	}
+
+	// Create list of project names for fuzzy finder
+	projectNames := make([]string, len(projects))
+	projectMap := make(map[string]*models.Project)
+	for i, proj := range projects {
+		projectNames[i] = proj.Name
+		projectMap[proj.Name] = proj
+	}
+
+	// Create reader from project names
+	projectReader := io.NopCloser(strings.NewReader(strings.Join(projectNames, "\n")))
+
+	// Use fuzzy finder to select project
+	disp.Printf("%s Select a project:\n", disp.InfoText("→"))
+	selectedProjectName, err := fuzzy.SelectBranchFromReader(projectReader)
+	if err != nil {
+		return eris.Wrap(err, "failed to select project")
+	}
+
+	selectedProject := projectMap[selectedProjectName]
+	if selectedProject == nil {
+		return eris.Errorf("selected project not found: %s", selectedProjectName)
+	}
+
+	// Step 2: Show branch picker for the selected project (same as sesh switch)
+	disp.Printf("%s Select a branch for %s:\n", disp.InfoText("→"), disp.Bold(selectedProject.Name))
+
+	// Start git fetch in background - don't wait for it
+	go func() {
+		if err := git.Fetch(selectedProject.LocalPath); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: git fetch failed: %s\n", eris.ToString(err, true))
+		}
+	}()
+
+	// Stream branches directly from git to fzf for instant UI
+	branchReader, err := git.StreamRemoteBranches(cmd.Context(), selectedProject.LocalPath)
+	if err != nil {
+		return eris.Wrap(err, "failed to start branch listing")
+	}
+
+	// Get binary path for preview command
+	var branch string
+	bin, err := os.Executable()
+	if err != nil {
+		// Fallback to simple selection without preview if we can't get binary path
+		selectedBranch, err := fuzzy.SelectBranchFromReader(branchReader)
+		if err != nil {
+			return eris.Wrap(err, "failed to select branch")
+		}
+		branch = selectedBranch
+	} else {
+		// Use preview command with absolute binary path
+		previewCmd := fmt.Sprintf("%s info --project %s {}", bin, selectedProject.Name)
+		selectedBranch, err := fuzzy.SelectBranchFromReaderWithPreview(branchReader, previewCmd)
+		if err != nil {
+			return eris.Wrap(err, "failed to select branch")
+		}
+		branch = selectedBranch
+	}
+
+	// Step 3: Proceed with normal switch behavior for the selected project and branch
+	return switchToProjectBranch(cfg, selectedProject, branch)
+}
+
+// switchToProjectBranch handles the switch logic for a given project and branch
+// This is the core switch logic extracted to be reusable
+func switchToProjectBranch(cfg *config.Config, proj *models.Project, branch string) error {
+	disp := display.NewStderr()
+
+	// Initialize session manager
+	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
+	if err != nil {
+		return eris.Wrap(err, "failed to initialize session manager")
+	}
+
+	_ = cleanOrphanedSessions(proj, sessionMgr, disp)
+
+	// Check if worktree already exists in filesystem
+	existingWorktree, err := state.GetWorktree(proj, branch)
+	if err == nil && existingWorktree != nil {
+		// Worktree exists, attach to existing or create new session
+		disp.Printf(
+			"%s %s\n",
+			disp.InfoText("→"),
+			disp.Bold(fmt.Sprintf("Switching to existing worktree: %s", existingWorktree.Path)),
+		)
+
+		// Generate session name
+		sessionName := workspace.GenerateSessionName(proj.Name, branch)
+
+		// Check if session is running
+		exists, err := sessionMgr.Exists(sessionName)
+		if err != nil {
+			return eris.Wrap(err, "failed to check session existence")
+		}
+
+		if exists {
+			// Record session history before attaching
+			recordSessionHistory(sessionName, proj.Name, branch)
+
+			// In noninteractive mode or detached mode, don't attach
+			if !tty.IsInteractive() || switchDetach {
+				disp.Printf(
+					"%s Session %s already exists\n",
+					disp.SuccessText("✓"),
+					disp.Bold(sessionName),
+				)
+				return nil
+			}
+
+			// Attach to existing session
+			return sessionMgr.Attach(sessionName)
+		}
+
+		// Session doesn't exist, create it
+		disp.Printf(
+			"%s Creating %s session %s\n",
+			disp.InfoText("✨"),
+			sessionMgr.Name(),
+			disp.Bold(sessionName),
+		)
+		if err := sessionMgr.Create(sessionName, existingWorktree.Path); err != nil {
+			return eris.Wrap(err, "failed to create session")
+		}
+
+		// Execute startup command if configured
+		startupCmd := getStartupCommand(cfg, existingWorktree.Path)
+		if startupCmd != "" && sessionMgr.Name() == "tmux" {
+			disp.Printf(
+				"%s Running startup command: %s\n",
+				disp.InfoText("⚙"),
+				disp.Faint(startupCmd),
+			)
+			if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
+				if err := tmuxMgr.SendKeys(sessionName, startupCmd); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
+				}
+			}
+		}
+
+		// Record session history before attaching
+		recordSessionHistory(sessionName, proj.Name, branch)
+
+		// In noninteractive mode or detached mode, don't attach
+		if !tty.IsInteractive() || switchDetach {
+			disp.Printf(
+				"%s Session %s created successfully\n",
+				disp.SuccessText("✓"),
+				disp.Bold(sessionName),
+			)
+			return nil
+		}
+
+		return sessionMgr.Attach(sessionName)
+	}
+
+	// Worktree doesn't exist, check branch existence
+	exists, _, err := git.DoesBranchExist(proj.LocalPath, branch)
+	if err != nil {
+		return eris.Wrap(err, "failed to check branch existence")
+	}
+
+	// Get worktree path
+	projectPath := workspace.GetProjectPath(cfg.WorkspaceDir, proj.Name)
+	worktreePath := workspace.GetWorktreePath(projectPath, branch)
+
+	// Create worktree based on branch state
+	if exists {
+		// Branch exists, create worktree from it
+		disp.Printf("%s Creating worktree for branch: %s\n", disp.InfoText("✨"), disp.Bold(branch))
+		if err := git.CreateWorktree(proj.LocalPath, branch, worktreePath); err != nil {
+			return eris.Wrap(err, "failed to create worktree from branch")
+		}
+	} else {
+		// Branch doesn't exist, create new branch and worktree
+		disp.Printf("%s Creating new branch and worktree: %s\n", disp.SuccessText("✨"), disp.Bold(branch))
+		if err := git.CreateWorktreeNewBranch(proj.LocalPath, branch, worktreePath, "HEAD"); err != nil {
+			return eris.Wrap(err, "failed to create worktree with new branch")
+		}
+	}
+
+	// Create session
+	sessionName := workspace.GenerateSessionName(proj.Name, branch)
+	disp.Printf(
+		"%s Creating %s session %s\n",
+		disp.InfoText("✨"),
+		sessionMgr.Name(),
+		disp.Bold(sessionName),
+	)
+	if err := sessionMgr.Create(sessionName, worktreePath); err != nil {
+		return eris.Wrap(err, "failed to create session")
+	}
+
+	disp.Printf("\n%s Successfully switched to %s\n", disp.SuccessText("✓"), disp.Bold(branch))
+	disp.Printf("  %s %s\n", disp.Faint("Worktree:"), worktreePath)
+	disp.Printf("  %s %s\n", disp.Faint("Session:"), sessionName)
+
+	// Execute startup command if configured
+	startupCmd := getStartupCommand(cfg, worktreePath)
+	if startupCmd != "" && sessionMgr.Name() == "tmux" {
+		disp.Printf("%s Running startup command: %s\n", disp.InfoText("⚙"), disp.Faint(startupCmd))
+		if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
+			if err := tmuxMgr.SendKeys(sessionName, startupCmd); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
+			}
+		}
+	}
+
+	// Record session history before attaching
+	recordSessionHistory(sessionName, proj.Name, branch)
+
+	// In noninteractive mode or detached mode, don't attach
+	if !tty.IsInteractive() || switchDetach {
+		return nil
+	}
+
+	// Attach to session
+	disp.Printf("\n%s Attaching to session...\n", disp.InfoText("→"))
+	return sessionMgr.Attach(sessionName)
 }
