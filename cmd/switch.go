@@ -507,7 +507,23 @@ func runInteractiveProjectSessionSelection(cfg *config.Config) error {
 		return eris.New("interactive mode not available in noninteractive environment")
 	}
 
-	// Step 1: Fuzzy search projects
+	// Initialize session manager first to get all sessions
+	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
+	if err != nil {
+		return eris.Wrap(err, "failed to initialize session manager")
+	}
+
+	// Get all sessions
+	sessions, err := sessionMgr.List()
+	if err != nil {
+		return eris.Wrap(err, "failed to list sessions")
+	}
+
+	if len(sessions) == 0 {
+		return eris.New("no active sessions found. Create a session first with 'sesh switch <branch>'")
+	}
+
+	// Step 1: Discover projects and filter to only those with active sessions
 	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
 	if err != nil {
 		return eris.Wrap(err, "failed to discover projects")
@@ -517,10 +533,32 @@ func runInteractiveProjectSessionSelection(cfg *config.Config) error {
 		return eris.New("no projects found in workspace")
 	}
 
-	// Create list of project names for fuzzy finder
-	projectNames := make([]string, len(projects))
-	for i, proj := range projects {
-		projectNames[i] = proj.Name
+	// Build a map of projects that have active sessions
+	projectSessionMap := make(map[string][]string)
+	for _, sess := range sessions {
+		// Session names follow the pattern: {project-name}_{branch}
+		// Find which project this session belongs to
+		for _, proj := range projects {
+			projectPrefix := proj.Name + "_"
+			if strings.HasPrefix(sess, projectPrefix) {
+				projectSessionMap[proj.Name] = append(projectSessionMap[proj.Name], sess)
+				break
+			}
+		}
+	}
+
+	if len(projectSessionMap) == 0 {
+		return eris.New("no projects with active sessions found")
+	}
+
+	// Create list of project names that have sessions
+	var projectNames []string
+	projectMap := make(map[string]*models.Project)
+	for _, proj := range projects {
+		if _, hasSession := projectSessionMap[proj.Name]; hasSession {
+			projectNames = append(projectNames, proj.Name)
+			projectMap[proj.Name] = proj
+		}
 	}
 
 	// Create reader from project names
@@ -533,45 +571,14 @@ func runInteractiveProjectSessionSelection(cfg *config.Config) error {
 		return eris.Wrap(err, "failed to select project")
 	}
 
-	// Find the selected project
-	var selectedProject *models.Project
-	for _, proj := range projects {
-		if proj.Name == selectedProjectName {
-			selectedProject = proj
-			break
-		}
-	}
-
+	selectedProject := projectMap[selectedProjectName]
 	if selectedProject == nil {
 		return eris.Errorf("selected project not found: %s", selectedProjectName)
 	}
 
-	// Step 2: Fuzzy search sessions
-	// Initialize session manager
-	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
-	if err != nil {
-		return eris.Wrap(err, "failed to initialize session manager")
-	}
-
-	// Get all sessions
-	sessions, err := sessionMgr.List()
-	if err != nil {
-		return eris.Wrap(err, "failed to list sessions")
-	}
-
-	// Filter sessions that belong to the selected project
-	// Session names follow the pattern: {project-name}_{branch}
+	// Step 2: Get sessions for the selected project
+	projectSessions := projectSessionMap[selectedProject.Name]
 	projectPrefix := selectedProject.Name + "_"
-	var projectSessions []string
-	for _, sess := range sessions {
-		if strings.HasPrefix(sess, projectPrefix) {
-			projectSessions = append(projectSessions, sess)
-		}
-	}
-
-	if len(projectSessions) == 0 {
-		return eris.Errorf("no active sessions found for project %s", selectedProject.Name)
-	}
 
 	// Create reader from session names
 	sessionReader := io.NopCloser(strings.NewReader(strings.Join(projectSessions, "\n")))
