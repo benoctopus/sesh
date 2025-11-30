@@ -155,15 +155,15 @@ sesh switch --select-project
 sesh switch -c "direnv allow" feature-baz
 ```
 
-**Interactive Project & Session Selection:**
+**Interactive Project & Branch Selection:**
 
 When you use `sesh switch --select-project`, sesh provides a two-step interactive selection process:
 
 1. First, select a project from all available projects using fuzzy finding
-2. Then, select a session from that project's active sessions
-3. Finally, attach to the selected session
+2. Then, select a branch for that project (same interactive fuzzy finder as `sesh switch`)
+3. Finally, switch to that branch (creating worktree and session if needed)
 
-This is useful when you want to quickly jump between projects and sessions without knowing the exact names.
+This is useful when you want to quickly jump between different projects without needing to navigate to the project directory first.
 
 #### `sesh list`
 
