@@ -94,7 +94,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 
 	// Handle special case: --select-project flag triggers interactive project and session selection
 	if switchSelectProject {
-		return runInteractiveProjectSessionSelection(cfg)
+		return runInteractiveProjectSessionSelection(cmd, cfg)
 	}
 
 	// Handle auto-clone if a git URL is provided
@@ -499,7 +499,7 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 
 // runInteractiveProjectSessionSelection handles the case when --select-project flag is provided
 // It fuzzy searches projects first, then branches, then proceeds with normal switch behavior
-func runInteractiveProjectSessionSelection(cfg *config.Config) error {
+func runInteractiveProjectSessionSelection(cmd *cobra.Command, cfg *config.Config) error {
 	disp := display.NewStderr()
 
 	// Check if running in interactive mode
@@ -551,7 +551,7 @@ func runInteractiveProjectSessionSelection(cfg *config.Config) error {
 	}()
 
 	// Stream branches directly from git to fzf for instant UI
-	branchReader, err := git.StreamRemoteBranches(nil, selectedProject.LocalPath)
+	branchReader, err := git.StreamRemoteBranches(cmd.Context(), selectedProject.LocalPath)
 	if err != nil {
 		return eris.Wrap(err, "failed to start branch listing")
 	}
