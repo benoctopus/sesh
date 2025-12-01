@@ -12,7 +12,7 @@ func TestProjectJSONMarshaling(t *testing.T) {
 		ID:          1,
 		Name:        "github.com/user/repo",
 		RemoteURL:   "https://github.com/user/repo.git",
-		LocalPath:   "/home/user/.sesh/github.com/user/repo/.git",
+		LocalPath:   "/home/user/.sesh/github.com/user/repo.git",
 		CreatedAt:   now,
 		LastFetched: &now,
 	}
@@ -128,7 +128,7 @@ func TestSessionDetails(t *testing.T) {
 			ID:          1,
 			Name:        "github.com/user/repo",
 			RemoteURL:   "https://github.com/user/repo.git",
-			LocalPath:   "/home/user/.sesh/github.com/user/repo/.git",
+			LocalPath:   "/home/user/.sesh/github.com/user/repo.git",
 			CreatedAt:   now,
 			LastFetched: &now,
 		},

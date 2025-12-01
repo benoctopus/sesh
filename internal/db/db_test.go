@@ -89,7 +89,7 @@ func TestCreateProject(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 
 	err := CreateProject(db, project)
@@ -126,7 +126,7 @@ func TestCreateProject_Duplicate(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 
 	// First insert should succeed
@@ -166,7 +166,7 @@ func TestGetProjectByID(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 
 	if err := CreateProject(db, project); err != nil {
@@ -191,7 +191,7 @@ func TestGetProjectByRemote(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 
 	if err := CreateProject(db, project); err != nil {
@@ -218,12 +218,12 @@ func TestGetAllProjects(t *testing.T) {
 		{
 			Name:      "github.com/test/repo1",
 			RemoteURL: "git@github.com:test/repo1.git",
-			LocalPath: "/home/user/.sesh/github.com/test/repo1/.git",
+			LocalPath: "/home/user/.sesh/github.com/test/repo1.git",
 		},
 		{
 			Name:      "github.com/test/repo2",
 			RemoteURL: "git@github.com:test/repo2.git",
-			LocalPath: "/home/user/.sesh/github.com/test/repo2/.git",
+			LocalPath: "/home/user/.sesh/github.com/test/repo2.git",
 		},
 	}
 
@@ -251,7 +251,7 @@ func TestUpdateProjectFetchTime(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 
 	if err := CreateProject(db, project); err != nil {
@@ -291,7 +291,7 @@ func TestDeleteProject(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 
 	if err := CreateProject(db, project); err != nil {
@@ -321,7 +321,7 @@ func TestCreateWorktree(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -368,7 +368,7 @@ func TestGetWorktreeByPath(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -402,7 +402,7 @@ func TestGetWorktreesByProject(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -448,7 +448,7 @@ func TestUpdateWorktreeLastUsed(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -491,7 +491,7 @@ func TestDeleteWorktree(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -530,7 +530,7 @@ func TestCreateSession(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -579,7 +579,7 @@ func TestGetSessionByTmuxName(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -621,7 +621,7 @@ func TestGetAllSessions(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -667,7 +667,7 @@ func TestGetAllSessionDetails(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -724,7 +724,7 @@ func TestUpdateSessionLastAttached(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -775,7 +775,7 @@ func TestDeleteSession(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -822,7 +822,7 @@ func TestDeleteProject_CascadesWorktreesAndSessions(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)
@@ -873,7 +873,7 @@ func TestDeleteWorktree_CascadesSessions(t *testing.T) {
 	project := &models.Project{
 		Name:      "github.com/test/repo",
 		RemoteURL: "git@github.com:test/repo.git",
-		LocalPath: "/home/user/.sesh/github.com/test/repo/.git",
+		LocalPath: "/home/user/.sesh/github.com/test/repo.git",
 	}
 	if err := CreateProject(db, project); err != nil {
 		t.Fatalf("CreateProject() failed: %v", err)

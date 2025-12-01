@@ -13,35 +13,34 @@ import (
 )
 
 // DiscoverProjects scans the workspace directory and discovers all projects
-// A project is identified by a .git directory (bare repo) in the workspace structure
+// A project is identified by a directory with .git suffix (bare repo) in the workspace structure
+// Example: ~/.sesh/github.com/user/repo.git
 func DiscoverProjects(workspaceDir string) ([]*models.Project, error) {
 	var projects []*models.Project
 
-	// Walk the workspace directory looking for .git directories
+	// Walk the workspace directory looking for directories ending with .git suffix
 	err := filepath.Walk(workspaceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Skip if not a directory named .git
-		if !info.IsDir() || info.Name() != ".git" {
+		// Skip if not a directory ending with .git
+		if !info.IsDir() || !strings.HasSuffix(info.Name(), ".git") {
 			return nil
 		}
 
-		// Check if it's a bare repository
+		// Check if it's a valid bare repository
 		configPath := filepath.Join(path, "config")
 		if _, err := os.Stat(configPath); err != nil {
 			return nil // Not a valid git repo
 		}
 
-		// Get the project path (parent of .git)
-		projectPath := filepath.Dir(path)
-
-		// Extract project name from path relative to workspace
-		relPath, err := filepath.Rel(workspaceDir, projectPath)
+		// Extract project name from path relative to workspace (remove .git suffix)
+		relPath, err := filepath.Rel(workspaceDir, path)
 		if err != nil {
 			return nil
 		}
+		projectName := strings.TrimSuffix(relPath, ".git")
 
 		// Get remote URL
 		remoteURL, err := git.GetRemoteURL(path)
@@ -50,12 +49,12 @@ func DiscoverProjects(workspaceDir string) ([]*models.Project, error) {
 			return nil
 		}
 
-		// Get creation time from .git directory
+		// Get creation time from bare repo directory
 		gitInfo, _ := os.Stat(path)
 		createdAt := gitInfo.ModTime()
 
 		project := &models.Project{
-			Name:      relPath,
+			Name:      projectName,
 			RemoteURL: remoteURL,
 			LocalPath: path,
 			CreatedAt: createdAt,

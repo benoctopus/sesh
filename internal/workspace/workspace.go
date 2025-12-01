@@ -10,25 +10,28 @@ import (
 	"github.com/rotisserie/eris"
 )
 
-// GetProjectPath returns the full path to a project within the workspace directory
+// GetBareRepoPath returns the path to the bare git repository for a project
+// The bare repository is stored as a sibling to the worktrees directory with a .git suffix
+// Format: <workspaceDir>/<projectName>.git
+// Example: ~/.sesh/github.com/user/repo.git
+func GetBareRepoPath(workspaceDir, projectName string) string {
+	return filepath.Join(workspaceDir, projectName+".git")
+}
+
+// GetWorktreeBasePath returns the base directory for worktrees of a project
+// This is separate from the bare repository to avoid nesting worktrees inside the .git directory
 // Format: <workspaceDir>/<projectName>
 // Example: ~/.sesh/github.com/user/repo
-func GetProjectPath(workspaceDir, projectName string) string {
+func GetWorktreeBasePath(workspaceDir, projectName string) string {
 	return filepath.Join(workspaceDir, projectName)
 }
 
-// GetBareRepoPath returns the path to the bare git repository for a project
-// Format: <workspaceDir>/<projectName>/.git
-func GetBareRepoPath(workspaceDir, projectName string) string {
-	return filepath.Join(workspaceDir, projectName, ".git")
-}
-
-// GetWorktreePath returns the full path to a worktree within a project
-// Format: <projectPath>/<sanitizedBranch>
+// GetWorktreePath returns the full path to a worktree for a specific branch
+// Format: <worktreeBasePath>/<sanitizedBranch>
 // Example: ~/.sesh/github.com/user/repo/main
-func GetWorktreePath(projectPath, branch string) string {
+func GetWorktreePath(worktreeBasePath, branch string) string {
 	sanitizedBranch := SanitizeBranchName(branch)
-	return filepath.Join(projectPath, sanitizedBranch)
+	return filepath.Join(worktreeBasePath, sanitizedBranch)
 }
 
 // EnsureProjectDir creates the project directory if it doesn't exist
@@ -116,7 +119,9 @@ func GetRepoNameFromProject(projectName string) string {
 }
 
 // GetProjectFromFullPath extracts the project name from a full workspace path
-// Example: "/home/user/.sesh/github.com/user/repo/main" -> "github.com/user/repo"
+// Works with both worktree paths and bare repo paths
+// Example worktree: "/home/user/.sesh/github.com/user/repo/main" -> "github.com/user/repo"
+// Example bare repo: "/home/user/.sesh/github.com/user/repo.git" -> "github.com/user/repo"
 func GetProjectFromFullPath(workspaceDir, fullPath string) (string, error) {
 	// Get relative path from workspace directory
 	relPath, err := filepath.Rel(workspaceDir, fullPath)
@@ -124,7 +129,12 @@ func GetProjectFromFullPath(workspaceDir, fullPath string) (string, error) {
 		return "", eris.Wrap(err, "path is not within workspace directory")
 	}
 
-	// Project name is all components except the last one (which is the worktree/branch)
+	// Check if this is a bare repo path (ends with .git)
+	if strings.HasSuffix(relPath, ".git") {
+		return strings.TrimSuffix(relPath, ".git"), nil
+	}
+
+	// For worktree paths, project name is all components except the last one (which is the worktree/branch)
 	parts := strings.Split(relPath, string(filepath.Separator))
 	if len(parts) < 2 {
 		return "", eris.Errorf("invalid workspace path structure: %s", fullPath)
@@ -144,10 +154,10 @@ func WorkspaceExists(workspaceDir string) bool {
 	return info.IsDir()
 }
 
-// ProjectExists checks if a project directory exists in the workspace
+// ProjectExists checks if a project exists in the workspace by checking for the bare repo
 func ProjectExists(workspaceDir, projectName string) bool {
-	projectPath := GetProjectPath(workspaceDir, projectName)
-	info, err := os.Stat(projectPath)
+	bareRepoPath := GetBareRepoPath(workspaceDir, projectName)
+	info, err := os.Stat(bareRepoPath)
 	if err != nil {
 		return false
 	}
@@ -165,10 +175,11 @@ func WorktreeExists(worktreePath string) bool {
 
 // ListProjects lists all projects in the workspace directory
 // Returns a list of project names (e.g., ["github.com/user/repo1", "github.com/user/repo2"])
+// Projects are identified by bare repositories with a .git suffix (e.g., repo.git)
 func ListProjects(workspaceDir string) ([]string, error) {
 	var projects []string
 
-	// Walk the workspace directory looking for .git directories
+	// Walk the workspace directory looking for directories ending with .git suffix
 	err := filepath.Walk(workspaceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -179,20 +190,25 @@ func ListProjects(workspaceDir string) ([]string, error) {
 			return nil
 		}
 
-		// Check if this is a .git directory (bare repo)
-		if info.Name() == ".git" {
-			// Get the project path (parent of .git)
-			projectPath := filepath.Dir(path)
+		// Check if this is a bare repo directory (ends with .git suffix)
+		if strings.HasSuffix(info.Name(), ".git") {
+			// Verify it's a valid git repo by checking for config file
+			configPath := filepath.Join(path, "config")
+			if _, err := os.Stat(configPath); err != nil {
+				return nil // Not a valid git repo
+			}
 
 			// Get relative path from workspace
-			relPath, err := filepath.Rel(workspaceDir, projectPath)
+			relPath, err := filepath.Rel(workspaceDir, path)
 			if err != nil {
 				return err
 			}
 
-			projects = append(projects, relPath)
+			// Remove the .git suffix to get the project name
+			projectName := strings.TrimSuffix(relPath, ".git")
+			projects = append(projects, projectName)
 
-			// Don't descend into .git directory
+			// Don't descend into .git directories
 			return filepath.SkipDir
 		}
 

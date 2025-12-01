@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
@@ -336,8 +335,8 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get worktree path
-	projectPath := workspace.GetProjectPath(cfg.WorkspaceDir, proj.Name)
-	worktreePath := workspace.GetWorktreePath(projectPath, branch)
+	worktreeBasePath := workspace.GetWorktreeBasePath(cfg.WorkspaceDir, proj.Name)
+	worktreePath := workspace.GetWorktreePath(worktreeBasePath, branch)
 
 	// Create worktree based on branch state
 	if exists {
@@ -466,13 +465,13 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 		return eris.Wrap(err, "failed to ensure workspace directory")
 	}
 
-	// Get project path in workspace
-	projectPath := workspace.GetProjectPath(cfg.WorkspaceDir, projectName)
+	// Get paths for bare repo and worktrees
+	bareRepoPath := workspace.GetBareRepoPath(cfg.WorkspaceDir, projectName)
+	worktreeBasePath := workspace.GetWorktreeBasePath(cfg.WorkspaceDir, projectName)
 
 	// Clone repository as bare repo
-	bareRepoPath := filepath.Join(projectPath, ".git")
 	disp.Printf("%s Cloning %s\n", disp.InfoText("⬇"), disp.Bold(remoteURL))
-	disp.Printf("  %s %s\n", disp.Faint("→"), projectPath)
+	disp.Printf("  %s %s\n", disp.Faint("→"), bareRepoPath)
 	if err := git.Clone(remoteURL, bareRepoPath); err != nil {
 		return eris.Wrap(err, "failed to clone repository")
 	}
@@ -484,7 +483,7 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 	}
 
 	// Create main worktree
-	worktreePath := workspace.GetWorktreePath(projectPath, defaultBranch)
+	worktreePath := workspace.GetWorktreePath(worktreeBasePath, defaultBranch)
 	disp.Printf(
 		"%s Creating worktree for branch %s\n",
 		disp.InfoText("✨"),
