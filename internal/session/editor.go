@@ -15,12 +15,13 @@ const (
 	EditorModeOpen      EditorMode = "open"      // Opens in a new window
 	EditorModeWorkspace EditorMode = "workspace" // Adds to current workspace
 	EditorModeReplace   EditorMode = "replace"   // Replaces current window
+	EditorModeReuse     EditorMode = "reuse"     // Reuses existing window (Zed default)
 )
 
-// EditorManager implements the SessionManager interface for VS Code and Cursor editors
+// EditorManager implements the SessionManager interface for VS Code, Cursor, and Zed editors
 type EditorManager struct {
-	command string     // "code" or "cursor"
-	mode    EditorMode // open, workspace, replace
+	command string     // "code", "cursor", or "zed"
+	mode    EditorMode // open, workspace, replace, reuse
 }
 
 // NewEditorManager creates a new EditorManager for the specified editor command and mode
@@ -105,6 +106,21 @@ func (e *EditorManager) openPath(path string) error {
 
 // buildArgs constructs the command line arguments based on the editor mode
 func (e *EditorManager) buildArgs(path string) []string {
+	// Zed uses different flags than VS Code/Cursor
+	if e.command == "zed" {
+		switch e.mode {
+		case EditorModeOpen:
+			// Zed requires -n to open a new window
+			return []string{"-n", path}
+		case EditorModeReuse:
+			// Zed's default is to reuse existing window
+			return []string{path}
+		default:
+			return []string{path}
+		}
+	}
+
+	// VS Code and Cursor
 	switch e.mode {
 	case EditorModeWorkspace:
 		return []string{"--add", path}
@@ -117,7 +133,7 @@ func (e *EditorManager) buildArgs(path string) []string {
 	}
 }
 
-// ParseEditorBackend parses a backend string like "code:open" or "cursor:replace"
+// ParseEditorBackend parses a backend string like "code:open", "cursor:replace", or "zed:open"
 // and returns the command and mode, or an error if invalid
 func ParseEditorBackend(backend string) (command string, mode EditorMode, err error) {
 	// Map of valid editor backends
@@ -131,6 +147,8 @@ func ParseEditorBackend(backend string) (command string, mode EditorMode, err er
 		"cursor:open":      {"cursor", EditorModeOpen},
 		"cursor:workspace": {"cursor", EditorModeWorkspace},
 		"cursor:replace":   {"cursor", EditorModeReplace},
+		"zed:open":         {"zed", EditorModeOpen},
+		"zed:reuse":        {"zed", EditorModeReuse},
 	}
 
 	if cfg, ok := validBackends[backend]; ok {

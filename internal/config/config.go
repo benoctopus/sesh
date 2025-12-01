@@ -354,6 +354,7 @@ func ValidateConfig(config *configFile) error {
 			// Editor backends
 			"code:open", "code:workspace", "code:replace",
 			"cursor:open", "cursor:workspace", "cursor:replace",
+			"zed:open", "zed:reuse",
 		}
 		valid := false
 		for _, backend := range validBackends {
@@ -364,7 +365,7 @@ func ValidateConfig(config *configFile) error {
 		}
 		if !valid {
 			return eris.Errorf(
-				"invalid session_backend: %s (must be one of: auto, tmux, zellij, screen, code:open, code:workspace, code:replace, cursor:open, cursor:workspace, cursor:replace)",
+				"invalid session_backend: %s (must be one of: auto, tmux, zellij, screen, code:open, code:workspace, code:replace, cursor:open, cursor:workspace, cursor:replace, zed:open, zed:reuse)",
 				config.SessionBackend,
 			)
 		}
