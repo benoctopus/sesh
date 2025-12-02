@@ -357,6 +357,11 @@ func findTmuxConf() (string, error) {
 
 ## Recent Updates (Context for Development)
 
+- **Worktree location refactoring**: Changed directory structure to avoid nesting worktrees inside bare repositories
+  - Bare repos are now stored at `<workspace>/<project>.git` (with `.git` suffix)
+  - Worktrees are stored at `<workspace>/<project>/<branch>` (sibling to bare repo)
+  - This fixes compatibility issues with tools that detect git repos by looking for `.git` directories
+  - Key functions: `GetBareRepoPath()`, `GetWorktreeBasePath()`, `GetWorktreePath()`
 - **Tmux Keybinding Installation**: Added `sesh tmux` command suite for tmux integration
   - `sesh tmux install` - automatically installs keybindings to tmux.conf
   - `sesh tmux keybindings` - displays recommended keybindings

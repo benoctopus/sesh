@@ -194,7 +194,38 @@ func TestGetRepoNameFromProject(t *testing.T) {
 	}
 }
 
-func TestGetProjectPath(t *testing.T) {
+func TestGetBareRepoPath(t *testing.T) {
+	tests := []struct {
+		name         string
+		workspaceDir string
+		projectName  string
+		expected     string
+	}{
+		{
+			name:         "simple project",
+			workspaceDir: "/home/user/.sesh",
+			projectName:  "myrepo",
+			expected:     "/home/user/.sesh/myrepo.git",
+		},
+		{
+			name:         "github project",
+			workspaceDir: "/home/user/.sesh",
+			projectName:  "github.com/user/repo",
+			expected:     "/home/user/.sesh/github.com/user/repo.git",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetBareRepoPath(tt.workspaceDir, tt.projectName)
+			if result != tt.expected {
+				t.Errorf("GetBareRepoPath(%q, %q) = %q, want %q", tt.workspaceDir, tt.projectName, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetWorktreeBasePath(t *testing.T) {
 	tests := []struct {
 		name         string
 		workspaceDir string
@@ -217,9 +248,9 @@ func TestGetProjectPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GetProjectPath(tt.workspaceDir, tt.projectName)
+			result := GetWorktreeBasePath(tt.workspaceDir, tt.projectName)
 			if result != tt.expected {
-				t.Errorf("GetProjectPath(%q, %q) = %q, want %q", tt.workspaceDir, tt.projectName, result, tt.expected)
+				t.Errorf("GetWorktreeBasePath(%q, %q) = %q, want %q", tt.workspaceDir, tt.projectName, result, tt.expected)
 			}
 		})
 	}
@@ -314,24 +345,38 @@ func TestGetProjectFromFullPath(t *testing.T) {
 		wantErr      bool
 	}{
 		{
-			name:         "valid workspace path",
+			name:         "worktree path",
 			workspaceDir: "/home/user/.sesh",
 			fullPath:     "/home/user/.sesh/github.com/user/repo/main",
 			expected:     filepath.Join("github.com", "user", "repo"),
 			wantErr:      false,
 		},
 		{
-			name:         "simple project",
+			name:         "simple project worktree",
 			workspaceDir: "/home/user/.sesh",
 			fullPath:     "/home/user/.sesh/myrepo/main",
 			expected:     "myrepo",
 			wantErr:      false,
 		},
 		{
-			name:         "nested project",
+			name:         "nested project worktree",
 			workspaceDir: "/home/user/.sesh",
 			fullPath:     "/home/user/.sesh/gitlab.com/org/project/feature-branch",
 			expected:     filepath.Join("gitlab.com", "org", "project"),
+			wantErr:      false,
+		},
+		{
+			name:         "bare repo path",
+			workspaceDir: "/home/user/.sesh",
+			fullPath:     "/home/user/.sesh/github.com/user/repo.git",
+			expected:     filepath.Join("github.com", "user", "repo"),
+			wantErr:      false,
+		},
+		{
+			name:         "simple bare repo path",
+			workspaceDir: "/home/user/.sesh",
+			fullPath:     "/home/user/.sesh/myrepo.git",
+			expected:     "myrepo",
 			wantErr:      false,
 		},
 	}

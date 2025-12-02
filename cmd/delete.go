@@ -3,7 +3,6 @@ package cmd
 import (
 	"bufio"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/benoctopus/sesh/internal/config"
@@ -151,11 +150,19 @@ func deleteProject(cfg *config.Config, proj *models.Project, disp display.Printe
 		}
 	}
 
-	// Delete project directory (including bare repo)
-	projectPath := filepath.Dir(proj.LocalPath)
-	disp.Printf("Removing project directory: %s\n", projectPath)
-	if err := os.RemoveAll(projectPath); err != nil {
-		return eris.Wrap(err, "failed to remove project directory")
+	// Delete bare repository
+	disp.Printf("Removing bare repository: %s\n", proj.LocalPath)
+	if err := os.RemoveAll(proj.LocalPath); err != nil {
+		return eris.Wrap(err, "failed to remove bare repository")
+	}
+
+	// Delete worktrees base directory (sibling to bare repo)
+	worktreeBasePath := workspace.GetWorktreeBasePath(cfg.WorkspaceDir, proj.Name)
+	if _, err := os.Stat(worktreeBasePath); err == nil {
+		disp.Printf("Removing worktrees directory: %s\n", worktreeBasePath)
+		if err := os.RemoveAll(worktreeBasePath); err != nil {
+			return eris.Wrap(err, "failed to remove worktrees directory")
+		}
 	}
 
 	disp.Printf("\nSuccessfully deleted project: %s\n", proj.Name)

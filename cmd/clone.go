@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/benoctopus/sesh/internal/config"
 	"github.com/benoctopus/sesh/internal/display"
@@ -65,13 +64,13 @@ func runClone(cmd *cobra.Command, args []string) error {
 		return eris.Errorf("project %s already exists in workspace", projectName)
 	}
 
-	// Get project path in workspace
-	projectPath := workspace.GetProjectPath(cfg.WorkspaceDir, projectName)
+	// Get paths for bare repo and worktrees
+	bareRepoPath := workspace.GetBareRepoPath(cfg.WorkspaceDir, projectName)
+	worktreeBasePath := workspace.GetWorktreeBasePath(cfg.WorkspaceDir, projectName)
 
 	// Clone repository as bare repo
-	bareRepoPath := filepath.Join(projectPath, ".git")
 	disp.Infof("Cloning %s", disp.Bold(remoteURL))
-	disp.Printf("  %s %s\n", disp.Faint("→"), projectPath)
+	disp.Printf("  %s %s\n", disp.Faint("→"), bareRepoPath)
 	if err := git.Clone(remoteURL, bareRepoPath); err != nil {
 		return eris.Wrap(err, "failed to clone repository")
 	}
@@ -83,7 +82,7 @@ func runClone(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create main worktree
-	worktreePath := workspace.GetWorktreePath(projectPath, defaultBranch)
+	worktreePath := workspace.GetWorktreePath(worktreeBasePath, defaultBranch)
 	disp.Infof("Creating worktree for branch %s", disp.Bold(defaultBranch))
 	if err := git.CreateWorktree(bareRepoPath, defaultBranch, worktreePath); err != nil {
 		return eris.Wrap(err, "failed to clone worktree")
