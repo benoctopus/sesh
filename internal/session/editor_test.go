@@ -30,6 +30,16 @@ func TestNewEditorManager(t *testing.T) {
 			command: "cursor",
 			mode:    EditorModeOpen,
 		},
+		{
+			name:    "zed open",
+			command: "zed",
+			mode:    EditorModeOpen,
+		},
+		{
+			name:    "zed reuse",
+			command: "zed",
+			mode:    EditorModeReuse,
+		},
 	}
 
 	for _, tt := range tests {
@@ -57,6 +67,8 @@ func TestEditorManager_Name(t *testing.T) {
 		{"cursor", EditorModeOpen, "cursor:open"},
 		{"cursor", EditorModeWorkspace, "cursor:workspace"},
 		{"cursor", EditorModeReplace, "cursor:replace"},
+		{"zed", EditorModeOpen, "zed:open"},
+		{"zed", EditorModeReuse, "zed:reuse"},
 	}
 
 	for _, tt := range tests {
@@ -113,18 +125,27 @@ func TestEditorManager_GetCurrentSessionName(t *testing.T) {
 
 func TestEditorManager_buildArgs(t *testing.T) {
 	tests := []struct {
-		mode EditorMode
-		path string
-		want []string
+		name    string
+		command string
+		mode    EditorMode
+		path    string
+		want    []string
 	}{
-		{EditorModeOpen, "/path/to/project", []string{"/path/to/project"}},
-		{EditorModeWorkspace, "/path/to/project", []string{"--add", "/path/to/project"}},
-		{EditorModeReplace, "/path/to/project", []string{"-r", "/path/to/project"}},
+		// VS Code / Cursor
+		{"code open", "code", EditorModeOpen, "/path/to/project", []string{"/path/to/project"}},
+		{"code workspace", "code", EditorModeWorkspace, "/path/to/project", []string{"--add", "/path/to/project"}},
+		{"code replace", "code", EditorModeReplace, "/path/to/project", []string{"-r", "/path/to/project"}},
+		{"cursor open", "cursor", EditorModeOpen, "/path/to/project", []string{"/path/to/project"}},
+		{"cursor workspace", "cursor", EditorModeWorkspace, "/path/to/project", []string{"--add", "/path/to/project"}},
+		{"cursor replace", "cursor", EditorModeReplace, "/path/to/project", []string{"-r", "/path/to/project"}},
+		// Zed (uses different flags)
+		{"zed open", "zed", EditorModeOpen, "/path/to/project", []string{"-n", "/path/to/project"}},
+		{"zed reuse", "zed", EditorModeReuse, "/path/to/project", []string{"/path/to/project"}},
 	}
 
 	for _, tt := range tests {
-		t.Run(string(tt.mode), func(t *testing.T) {
-			mgr := NewEditorManager("code", tt.mode)
+		t.Run(tt.name, func(t *testing.T) {
+			mgr := NewEditorManager(tt.command, tt.mode)
 			got := mgr.buildArgs(tt.path)
 			if len(got) != len(tt.want) {
 				t.Errorf("buildArgs() = %v, want %v", got, tt.want)
@@ -152,8 +173,11 @@ func TestParseEditorBackend(t *testing.T) {
 		{"cursor:open", "cursor", EditorModeOpen, false},
 		{"cursor:workspace", "cursor", EditorModeWorkspace, false},
 		{"cursor:replace", "cursor", EditorModeReplace, false},
+		{"zed:open", "zed", EditorModeOpen, false},
+		{"zed:reuse", "zed", EditorModeReuse, false},
 		{"invalid", "", "", true},
 		{"code:invalid", "", "", true},
+		{"zed:invalid", "", "", true},
 		{"tmux", "", "", true},
 	}
 
@@ -187,6 +211,8 @@ func TestIsEditorBackend(t *testing.T) {
 		{"cursor:open", true},
 		{"cursor:workspace", true},
 		{"cursor:replace", true},
+		{"zed:open", true},
+		{"zed:reuse", true},
 		{"tmux", false},
 		{"zellij", false},
 		{"auto", false},
@@ -213,6 +239,8 @@ func TestGetBackendName_EditorBackends(t *testing.T) {
 		{BackendCursorOpen, "Cursor (new window)"},
 		{BackendCursorWorkspace, "Cursor (add to workspace)"},
 		{BackendCursorReplace, "Cursor (replace window)"},
+		{BackendZedOpen, "Zed (new window)"},
+		{BackendZedReuse, "Zed (reuse window)"},
 	}
 
 	for _, tt := range tests {

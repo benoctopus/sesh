@@ -15,6 +15,7 @@ This document provides guidance for AI coding assistants working with the `sesh`
 - **Build System**: Nix flakes - for reproducible development environment and packaging
 - **Task Runner**: go-task (Taskfile) - for common development tasks
 - **Session Backends**: tmux, zellij - terminal multiplexers for session management
+- **Editor Backends**: VS Code, Cursor, Zed - code editors that can open worktrees directly
 
 ## Project Structure
 
@@ -351,12 +352,16 @@ func findTmuxConf() (string, error) {
 9. **Leverage existing tools** - Use fzf or peco for interactive selection
 10. **Bare repository structure** - All projects use bare repositories with worktrees, not regular clones
 11. **Worktree tracking** - Recent fixes ensure proper upstream tracking for worktree branches
-12. **Multiple session backends** - Support tmux and zellij, with auto-detection capability
+12. **Multiple session backends** - Support tmux, zellij, and editor backends (code, cursor, zed) with auto-detection capability
 13. **Tree output format** - The list command now outputs in tree format for better visualization
 14. Update this document when new patterns or conventions are established.
 
 ## Recent Updates (Context for Development)
 
+- **Zed Editor Backend**: Added Zed editor support as a session backend
+  - `zed:open` - opens worktree in a new Zed window (uses `-n` flag)
+  - `zed:reuse` - opens worktree in existing Zed window (Zed's default behavior)
+  - Zed uses different CLI flags than VS Code/Cursor, handled in `buildArgs()`
 - **Tmux Keybinding Installation**: Added `sesh tmux` command suite for tmux integration
   - `sesh tmux install` - automatically installs keybindings to tmux.conf
   - `sesh tmux keybindings` - displays recommended keybindings

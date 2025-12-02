@@ -50,13 +50,15 @@ const (
 	BackendNone   BackendType = "none"
 	BackendAuto   BackendType = "auto"
 
-	// Editor backends (VS Code and Cursor)
+	// Editor backends (VS Code, Cursor, and Zed)
 	BackendCodeOpen        BackendType = "code:open"
 	BackendCodeWorkspace   BackendType = "code:workspace"
 	BackendCodeReplace     BackendType = "code:replace"
 	BackendCursorOpen      BackendType = "cursor:open"
 	BackendCursorWorkspace BackendType = "cursor:workspace"
 	BackendCursorReplace   BackendType = "cursor:replace"
+	BackendZedOpen         BackendType = "zed:open"
+	BackendZedReuse        BackendType = "zed:reuse"
 )
 
 // NewSessionManager creates a new session manager based on the specified backend
@@ -145,6 +147,10 @@ func GetBackendName(backend BackendType) string {
 		return "Cursor (add to workspace)"
 	case BackendCursorReplace:
 		return "Cursor (replace window)"
+	case BackendZedOpen:
+		return "Zed (new window)"
+	case BackendZedReuse:
+		return "Zed (reuse window)"
 	default:
 		return "Unknown"
 	}
