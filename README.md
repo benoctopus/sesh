@@ -401,6 +401,34 @@ sesh supports multiple session manager backends:
 session_backend: tmux  # or: zellij, screen, auto, none
 ```
 
+### Editor Backends
+
+In addition to terminal multiplexers, sesh can open worktrees directly in your favorite code editor:
+
+| Backend | Description | CLI Command |
+|---------|-------------|-------------|
+| `code:open` | VS Code - new window | `code <path>` |
+| `code:workspace` | VS Code - add to workspace | `code --add <path>` |
+| `code:replace` | VS Code - replace window | `code -r <path>` |
+| `cursor:open` | Cursor - new window | `cursor <path>` |
+| `cursor:workspace` | Cursor - add to workspace | `cursor --add <path>` |
+| `cursor:replace` | Cursor - replace window | `cursor -r <path>` |
+| `zed:open` | Zed - new window | `zed -n <path>` |
+| `zed:reuse` | Zed - reuse existing window | `zed <path>` |
+
+```yaml
+# config.yaml - use Zed editor
+session_backend: zed:open
+```
+
+Or via environment variable:
+
+```bash
+export SESH_SESSION_BACKEND="zed:reuse"
+```
+
+**Note:** Editor backends don't support session listing, deletion, or switching like terminal multiplexers do. They simply open the worktree path in the editor when you run `sesh switch`.
+
 ### Tmux Integration
 
 sesh provides seamless tmux integration with convenient keybindings for quick session switching.
