@@ -26,6 +26,7 @@ var (
 	switchStartupCommand string
 	switchPR             bool
 	switchDetach         bool
+	switchAllWorktrees   bool
 )
 
 var switchCmd = &cobra.Command{
@@ -35,6 +36,7 @@ var switchCmd = &cobra.Command{
 	Long: `Switch to a branch or pull request, creating a worktree and session if they don't exist.
 If no branch is specified, an interactive fuzzy finder will show all available branches.
 Use --pr to select from open pull requests instead.
+Use --all-worktrees to select from all local worktrees across all projects.
 
 The project is automatically detected from the current working directory,
 or can be specified explicitly with the --project flag.
@@ -49,6 +51,7 @@ Examples:
   sesh sw new-feature                                        # Create new branch automatically
   sesh switch                                                # Interactive fuzzy branch selection
   sesh switch --pr                                           # Interactive PR selection
+  sesh switch --all-worktrees                                # Select from all local worktrees
   sesh switch --project myproject feature-bar                # Explicit project
   sesh switch -p git@github.com:user/repo.git main           # Auto-clone and switch
   sesh switch -p https://github.com/user/repo.git feature    # Auto-clone HTTPS URL
@@ -67,6 +70,8 @@ func init() {
 		BoolVar(&switchPR, "pr", false, "Select from open pull requests")
 	switchCmd.Flags().
 		BoolVarP(&switchDetach, "detach", "d", false, "Create session without attaching to it")
+	switchCmd.Flags().
+		BoolVarP(&switchAllWorktrees, "all-worktrees", "a", false, "Select from all local worktrees across all projects")
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -76,6 +81,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return eris.Wrap(err, "failed to load configuration")
+	}
+
+	// Handle --all-worktrees mode (list all worktrees across all projects)
+	if switchAllWorktrees {
+		return switchToAllWorktrees(cmd, cfg, args)
 	}
 
 	// Get current working directory
@@ -496,4 +506,197 @@ func cloneRepository(cfg *config.Config, remoteURL, projectName string) error {
 	disp.Printf("%s Successfully cloned %s\n", disp.SuccessText("✓"), disp.Bold(projectName))
 
 	return nil
+}
+
+// switchToAllWorktrees handles the --all-worktrees flag
+// It lists all worktrees across all projects and allows the user to select one
+func switchToAllWorktrees(cmd *cobra.Command, cfg *config.Config, args []string) error {
+	disp := display.NewStderr()
+
+	// Check for conflicting flags
+	if switchPR {
+		return eris.New("cannot use --pr with --all-worktrees")
+	}
+	if switchProjectName != "" {
+		return eris.New("cannot use --project with --all-worktrees")
+	}
+	if len(args) > 0 {
+		return eris.New("cannot specify branch name with --all-worktrees")
+	}
+
+	// Check if interactive mode
+	if !tty.IsInteractive() {
+		return eris.New("--all-worktrees requires interactive mode")
+	}
+
+	// Discover all projects from filesystem
+	projects, err := state.DiscoverProjects(cfg.WorkspaceDir)
+	if err != nil {
+		return eris.Wrap(err, "failed to discover projects")
+	}
+
+	if len(projects) == 0 {
+		disp.Info("No projects found.")
+		disp.Printf(
+			"  %s Clone a repository with: %s\n",
+			disp.Faint("→"),
+			disp.Bold("sesh clone <remote-url>"),
+		)
+		return nil
+	}
+
+	// Build a list of all worktrees with their metadata
+	type WorktreeChoice struct {
+		ProjectName  string
+		Branch       string
+		SessionName  string
+		WorktreePath string
+		DisplayLine  string
+	}
+
+	var choices []WorktreeChoice
+
+	for _, proj := range projects {
+		worktrees, err := state.DiscoverWorktrees(proj)
+		if err != nil {
+			// Skip projects with errors
+			continue
+		}
+
+		for _, wt := range worktrees {
+			sessionName := workspace.GenerateSessionName(proj.Name, wt.Branch)
+			// Format: "projectName/branch"
+			displayLine := fmt.Sprintf("%s/%s", proj.Name, wt.Branch)
+
+			choices = append(choices, WorktreeChoice{
+				ProjectName:  proj.Name,
+				Branch:       wt.Branch,
+				SessionName:  sessionName,
+				WorktreePath: wt.Path,
+				DisplayLine:  displayLine,
+			})
+		}
+	}
+
+	if len(choices) == 0 {
+		disp.Info("No worktrees found.")
+		disp.Printf(
+			"  %s Create a worktree with: %s\n",
+			disp.Faint("→"),
+			disp.Bold("sesh switch <branch>"),
+		)
+		return nil
+	}
+
+	// Create a reader with all worktree choices
+	var choiceLines []string
+	for _, choice := range choices {
+		choiceLines = append(choiceLines, choice.DisplayLine)
+	}
+	choiceReader := io.NopCloser(strings.NewReader(strings.Join(choiceLines, "\n")))
+
+	// Use fuzzy finder to select worktree (without preview for now)
+	selectedLine, err := fuzzy.SelectBranchFromReader(choiceReader)
+	if err != nil {
+		return eris.Wrap(err, "failed to select worktree")
+	}
+
+	// Find the selected worktree choice
+	var selected *WorktreeChoice
+	for _, choice := range choices {
+		if choice.DisplayLine == selectedLine {
+			selected = &choice
+			break
+		}
+	}
+
+	if selected == nil {
+		return eris.Errorf("selected worktree not found: %s", selectedLine)
+	}
+
+	// Get the project
+	proj, err := state.GetProject(cfg.WorkspaceDir, selected.ProjectName)
+	if err != nil {
+		return eris.Wrap(err, "failed to get project")
+	}
+
+	// Initialize session manager
+	sessionMgr, err := session.NewSessionManager(cfg.SessionBackend)
+	if err != nil {
+		return eris.Wrap(err, "failed to initialize session manager")
+	}
+
+	_ = cleanOrphanedSessions(proj, sessionMgr, disp)
+
+	// Check if session is running
+	exists, err := sessionMgr.Exists(selected.SessionName)
+	if err != nil {
+		return eris.Wrap(err, "failed to check session existence")
+	}
+
+	if exists {
+		// Record session history before attaching
+		recordSessionHistory(selected.SessionName, selected.ProjectName, selected.Branch)
+
+		// In detached mode, don't attach
+		if switchDetach {
+			disp.Printf(
+				"%s Session %s already exists\n",
+				disp.SuccessText("✓"),
+				disp.Bold(selected.SessionName),
+			)
+			return nil
+		}
+
+		// Attach to existing session
+		disp.Printf(
+			"%s Switching to existing session: %s\n",
+			disp.InfoText("→"),
+			disp.Bold(selected.SessionName),
+		)
+		return sessionMgr.Attach(selected.SessionName)
+	}
+
+	// Session doesn't exist, create it
+	disp.Printf(
+		"%s Creating %s session %s\n",
+		disp.InfoText("✨"),
+		sessionMgr.Name(),
+		disp.Bold(selected.SessionName),
+	)
+	if err := sessionMgr.Create(selected.SessionName, selected.WorktreePath); err != nil {
+		return eris.Wrap(err, "failed to create session")
+	}
+
+	// Execute startup command if configured
+	startupCmd := getStartupCommand(cfg, selected.WorktreePath)
+	if startupCmd != "" && sessionMgr.Name() == "tmux" {
+		disp.Printf(
+			"%s Running startup command: %s\n",
+			disp.InfoText("⚙"),
+			disp.Faint(startupCmd),
+		)
+		if tmuxMgr, ok := sessionMgr.(*session.TmuxManager); ok {
+			if err := tmuxMgr.SendKeys(selected.SessionName, startupCmd); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to run startup command: %v\n", err)
+			}
+		}
+	}
+
+	// Record session history before attaching
+	recordSessionHistory(selected.SessionName, selected.ProjectName, selected.Branch)
+
+	// In detached mode, don't attach
+	if switchDetach {
+		disp.Printf(
+			"%s Session %s created successfully\n",
+			disp.SuccessText("✓"),
+			disp.Bold(selected.SessionName),
+		)
+		return nil
+	}
+
+	// Attach to session
+	disp.Printf("\n%s Attaching to session...\n", disp.InfoText("→"))
+	return sessionMgr.Attach(selected.SessionName)
 }
