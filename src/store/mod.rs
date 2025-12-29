@@ -15,17 +15,22 @@ pub struct Store {
 impl Store {
     pub async fn open() -> Result<Self> {
         let db_path = db_path()?;
-        
+
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
+        // Create an empty file if it doesn't exist to ensure SQLx can connect
+        if !db_path.exists() {
+            std::fs::File::create(&db_path)?;
+        }
+
         let db_exists = db_path.exists();
-        
+
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
-            .connect(&format!("sqlite:{}", db_path.display()))
+            .connect(&format!("sqlite://{}", db_path.display()))
             .await
             .map_err(|e| {
                 if db_exists {
@@ -44,15 +49,15 @@ impl Store {
                     }
                 }
             })?;
-        
+
         // Run migrations
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await?;
-        
-        Ok(Self { pool: Arc::new(pool) })
+        sqlx::migrate!("./migrations").run(&pool).await?;
+
+        Ok(Self {
+            pool: Arc::new(pool),
+        })
     }
-    
+
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
@@ -63,6 +68,5 @@ fn db_path() -> Result<PathBuf> {
 }
 
 // Re-export query functions and models for convenience
+pub use models::{CreateProject, CreateSession, CreateWorktree};
 pub use queries::*;
-pub use models::{CreateProject, CreateWorktree, CreateSession};
-
