@@ -1,7 +1,8 @@
 pub mod schema;
 
+pub use schema::Config;
+
 use anyhow::{Context, Result};
-use schema::Config;
 use std::path::PathBuf;
 
 pub fn load() -> Result<Config> {

@@ -46,7 +46,7 @@ impl Store {
             })?;
         
         // Run migrations
-        sqlx::migrate!("./src/store/migrations")
+        sqlx::migrate!("./migrations")
             .run(&pool)
             .await?;
         
@@ -62,6 +62,7 @@ fn db_path() -> Result<PathBuf> {
     Ok(config::ensure_config_dir()?.join("sesh.db"))
 }
 
-// Re-export query functions for convenience
+// Re-export query functions and models for convenience
 pub use queries::*;
+pub use models::{CreateProject, CreateWorktree, CreateSession};
 

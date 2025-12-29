@@ -43,7 +43,7 @@ impl Picker for SkimPicker {
             .join("\n");
         
         let mut skim_options = SkimOptionsBuilder::default()
-            .height(Some("50%"))
+            .height("50%".to_string())
             .multi(options.multi_select)
             .build()
             .map_err(|e| crate::error::Error::GitError {
@@ -51,7 +51,7 @@ impl Picker for SkimPicker {
             })?;
         
         if let Some(prompt) = &options.prompt {
-            skim_options.prompt = Some(prompt.clone());
+            skim_options.prompt = prompt.clone().into();
         }
         
         if let Some(header) = &options.header {

@@ -39,23 +39,28 @@ pub async fn run(args: CleanArgs) -> Result<()> {
     
     if args.orphaned {
         // Remove sessions where worktree doesn't exist
-        let sessions = sqlx::query!(
+        let rows = sqlx::query(
             r#"
-            SELECT s.* FROM sessions s
+            SELECT s.id FROM sessions s
             LEFT JOIN worktrees w ON s.worktree_id = w.id
             WHERE w.id IS NULL
-            "#
+            "#,
         )
         .fetch_all(store.pool())
         .await?;
         
-        for session in sessions {
-            sqlx::query!("DELETE FROM sessions WHERE id = ?1", session.id)
+        let mut count = 0;
+        use sqlx::Row;
+        for row in rows {
+            let id: i64 = row.get::<i64, _>("id");
+            sqlx::query("DELETE FROM sessions WHERE id = ?1")
+                .bind(id)
                 .execute(store.pool())
                 .await?;
+            count += 1;
         }
         
-        println!("Removed {} orphaned sessions", sessions.len());
+        println!("Removed {} orphaned sessions", count);
     }
     
     if !args.stale && !args.orphaned {

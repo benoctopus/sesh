@@ -60,18 +60,18 @@ pub enum Commands {
     },
 }
 
-pub async fn run() -> Result<()> {
+pub async fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::Clone(args) => clone::run(args).await,
-        Commands::Switch(args) => switch::run(args).await,
-        Commands::List(args) => list::run(args).await,
-        Commands::Delete(args) => delete::run(args).await,
-        Commands::Clean(args) => clean::run(args).await,
-        Commands::Pop => pop::run().await,
-        Commands::Status => status::run().await,
-        Commands::Logs(args) => logs::run(args).await,
+        Commands::Clone(args) => clone::run(args).await.map_err(Into::into),
+        Commands::Switch(args) => switch::run(args).await.map_err(Into::into),
+        Commands::List(args) => list::run(args).await.map_err(Into::into),
+        Commands::Delete(args) => delete::run(args).await.map_err(Into::into),
+        Commands::Clean(args) => clean::run(args).await.map_err(Into::into),
+        Commands::Pop => pop::run().await.map_err(Into::into),
+        Commands::Status => status::run().await.map_err(Into::into),
+        Commands::Logs(args) => logs::run(args).await.map_err(Into::into),
         Commands::Doctor => {
             eprintln!("Doctor command not yet implemented");
             Ok(())
@@ -85,9 +85,11 @@ pub async fn run() -> Result<()> {
 /// Generate shell completions
 pub fn generate_completions(shell: clap_complete::Shell) -> Result<()> {
     use std::io;
+    use clap::CommandFactory;
+    let mut cmd = Cli::command();
     clap_complete::generate(
         shell,
-        &mut Cli::command(),
+        &mut cmd,
         "sesh",
         &mut io::stdout(),
     );

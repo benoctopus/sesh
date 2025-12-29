@@ -5,34 +5,19 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Project not found: {name}")]
-    #[diagnostic(help("List available projects with: sesh list --projects"))]
+    #[error("Project not found: {name}. List available projects with: sesh list --projects")]
     ProjectNotFound { name: String },
     
-    #[error("Worktree path no longer exists: {path}")]
-    #[diagnostic(
-        help("The worktree directory was deleted outside of sesh."),
-        help("Remove the stale entry with: sesh clean --stale")
-    )]
+    #[error("Worktree path no longer exists: {path}. Remove the stale entry with: sesh clean --stale")]
     WorktreeStale { path: PathBuf },
     
-    #[error("Branch '{branch}' not found locally or on remote")]
-    #[diagnostic(help("Create a new branch with: sesh switch --create {branch}"))]
+    #[error("Branch '{branch}' not found locally or on remote. Create a new branch with: sesh switch --create {branch}")]
     BranchNotFound { branch: String },
     
-    #[error("Session backend '{backend}' is not available")]
-    #[diagnostic(
-        help("{install_hint}"),
-        help("Or change backend in ~/.config/sesh/config.toml")
-    )]
+    #[error("Session backend '{backend}' is not available. {install_hint}. Or change backend in ~/.config/sesh/config.toml")]
     BackendUnavailable { backend: String, install_hint: String },
     
-    #[error("No fuzzy finder available for interactive selection")]
-    #[diagnostic(
-        help("Install skim (recommended): cargo install skim"),
-        help("Or install fzf: brew install fzf"),
-        help("Or specify the branch directly: sesh switch <branch>")
-    )]
+    #[error("No fuzzy finder available for interactive selection. Install skim (recommended): cargo install skim, or install fzf: brew install fzf, or specify the branch directly: sesh switch <branch>")]
     NoPickerAvailable,
     
     #[error("Git operation failed: {message}")]
@@ -41,8 +26,7 @@ pub enum Error {
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
     
-    #[error("Database corrupted: {path}")]
-    #[diagnostic(help("{suggestion}"))]
+    #[error("Database corrupted: {path}. {suggestion}")]
     DatabaseCorrupted { path: PathBuf, suggestion: String },
     
     #[error("Failed to open database: {path}")]
@@ -69,8 +53,7 @@ pub enum Error {
     #[error("No previous session in history")]
     NoPreviousSession,
     
-    #[error("Missing dependency: {name}")]
-    #[diagnostic(help("{install_hint}"))]
+    #[error("Missing dependency: {name}. {install_hint}")]
     MissingDependency { name: String, install_hint: String },
     
     #[error("Invalid URL: {url}")]
@@ -78,5 +61,8 @@ pub enum Error {
     
     #[error("Repository already exists at: {path}")]
     RepositoryExists { path: PathBuf },
+    
+    #[error("Anyhow error: {0}")]
+    AnyhowError(#[from] anyhow::Error),
 }
 

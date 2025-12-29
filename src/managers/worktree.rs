@@ -61,7 +61,10 @@ impl WorktreeManager {
         let repo = git::open(&project.clone_path)?;
         
         // Create the worktree
-        git::create_worktree(&repo, branch, &worktree_path).await?;
+        let repo_path = repo.path().parent().ok_or_else(|| Error::GitError {
+            message: "Failed to get repository path".to_string(),
+        })?;
+        git::create_worktree(repo_path, branch, &worktree_path).await?;
         
         // Register in database
         let worktree = crate::store::queries::create_worktree(
@@ -105,7 +108,7 @@ impl WorktreeManager {
         
         // Database cascade will clean up sessions
         // We need to manually delete the worktree record
-        sqlx::query!("DELETE FROM worktrees WHERE id = ?1")
+        sqlx::query("DELETE FROM worktrees WHERE id = ?1")
             .bind(worktree_id)
             .execute(self.store.pool())
             .await?;
@@ -127,7 +130,7 @@ impl WorktreeManager {
             match git::get_upstream(&repo, branch) {
                 Ok(upstream) => {
                     // Verify upstream still exists
-                    match git::remote_branch_exists(&repo, &upstream).await {
+                    match git::remote_branch_exists(&repo, &upstream) {
                         Ok(true) => Ok(BranchStatus::Tracked),
                         Ok(false) => Ok(BranchStatus::LocalOnly {
                             warning: Some("Remote branch was deleted".to_string()),

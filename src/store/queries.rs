@@ -4,134 +4,132 @@ use sqlx::sqlite::SqlitePool;
 use std::path::PathBuf;
 
 impl Project {
-    pub async fn from_row(row: sqlx::sqlite::SqliteRow) -> Result<Self> {
+    pub fn from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Self> {
+        use sqlx::Row;
         Ok(Self {
-            id: row.get("id"),
-            name: row.get("name"),
-            display_name: row.get("display_name"),
-            remote_url: row.get("remote_url"),
+            id: row.get::<i64, _>("id"),
+            name: row.get::<String, _>("name"),
+            display_name: row.get::<String, _>("display_name"),
+            remote_url: row.get::<String, _>("remote_url"),
             clone_path: PathBuf::from(row.get::<String, _>("clone_path")),
-            default_branch: row.get("default_branch"),
-            created_at: row.get("created_at"),
-            last_fetched_at: row.get("last_fetched_at"),
+            default_branch: row.get::<String, _>("default_branch"),
+            created_at: row.get::<String, _>("created_at"),
+            last_fetched_at: row.get::<Option<String>, _>("last_fetched_at"),
         })
     }
 }
 
 impl Worktree {
-    pub async fn from_row(row: sqlx::sqlite::SqliteRow) -> Result<Self> {
+    pub fn from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Self> {
+        use sqlx::Row;
         Ok(Self {
-            id: row.get("id"),
-            project_id: row.get("project_id"),
-            branch: row.get("branch"),
+            id: row.get::<i64, _>("id"),
+            project_id: row.get::<i64, _>("project_id"),
+            branch: row.get::<String, _>("branch"),
             path: PathBuf::from(row.get::<String, _>("path")),
             is_primary: row.get::<i64, _>("is_primary") != 0,
-            created_at: row.get("created_at"),
-            last_accessed_at: row.get("last_accessed_at"),
+            created_at: row.get::<String, _>("created_at"),
+            last_accessed_at: row.get::<String, _>("last_accessed_at"),
         })
     }
 }
 
 impl Session {
-    pub async fn from_row(row: sqlx::sqlite::SqliteRow) -> Result<Self> {
+    pub fn from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Self> {
+        use sqlx::Row;
         Ok(Self {
-            id: row.get("id"),
-            worktree_id: row.get("worktree_id"),
-            session_name: row.get("session_name"),
-            backend: row.get("backend"),
-            created_at: row.get("created_at"),
-            last_attached_at: row.get("last_attached_at"),
+            id: row.get::<i64, _>("id"),
+            worktree_id: row.get::<i64, _>("worktree_id"),
+            session_name: row.get::<String, _>("session_name"),
+            backend: row.get::<String, _>("backend"),
+            created_at: row.get::<String, _>("created_at"),
+            last_attached_at: row.get::<String, _>("last_attached_at"),
         })
     }
 }
 
 pub async fn create_project(pool: &SqlitePool, project: CreateProject) -> Result<Project> {
-    let id = sqlx::query!(
+    let id = sqlx::query(
         r#"
         INSERT INTO projects (name, display_name, remote_url, clone_path, default_branch)
         VALUES (?1, ?2, ?3, ?4, ?5)
         "#,
-        project.name,
-        project.display_name,
-        project.remote_url,
-        project.clone_path.to_string_lossy(),
-        project.default_branch
     )
+    .bind(&project.name)
+    .bind(&project.display_name)
+    .bind(&project.remote_url)
+    .bind(project.clone_path.to_string_lossy().to_string())
+    .bind(&project.default_branch)
     .execute(pool)
     .await?
     .last_insert_rowid();
-    
+
     get_project(pool, id).await
 }
 
 pub async fn get_project(pool: &SqlitePool, id: i64) -> Result<Project> {
-    let row = sqlx::query!(
-        "SELECT * FROM projects WHERE id = ?1",
-        id
-    )
-    .fetch_one(pool)
-    .await?;
-    
-    Project::from_row(row.into()).await
+    let row = sqlx::query("SELECT * FROM projects WHERE id = ?1")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+
+    Project::from_row(&row)
 }
 
 pub async fn get_project_by_name(pool: &SqlitePool, name: &str) -> Result<Project> {
-    let row = sqlx::query!(
-        "SELECT * FROM projects WHERE name = ?1",
-        name
-    )
-    .fetch_one(pool)
-    .await?;
-    
-    Project::from_row(row.into()).await
+    let row = sqlx::query("SELECT * FROM projects WHERE name = ?1")
+        .bind(name)
+        .fetch_one(pool)
+        .await?;
+
+    Project::from_row(&row)
 }
 
 pub async fn list_projects(pool: &SqlitePool) -> Result<Vec<Project>> {
-    let rows = sqlx::query!("SELECT * FROM projects ORDER BY name")
+    let rows = sqlx::query("SELECT * FROM projects ORDER BY name")
         .fetch_all(pool)
         .await?;
-    
+
     let mut projects = Vec::new();
     for row in rows {
-        projects.push(Project::from_row(row.into()).await?);
+        projects.push(Project::from_row(&row)?);
     }
     Ok(projects)
 }
 
 pub async fn delete_project(pool: &SqlitePool, id: i64) -> Result<()> {
-    sqlx::query!("DELETE FROM projects WHERE id = ?1", id)
+    sqlx::query("DELETE FROM projects WHERE id = ?1")
+        .bind(id)
         .execute(pool)
         .await?;
     Ok(())
 }
 
 pub async fn create_worktree(pool: &SqlitePool, worktree: CreateWorktree) -> Result<Worktree> {
-    let id = sqlx::query!(
+    let id = sqlx::query(
         r#"
         INSERT INTO worktrees (project_id, branch, path, is_primary)
         VALUES (?1, ?2, ?3, ?4)
         "#,
-        worktree.project_id,
-        worktree.branch,
-        worktree.path.to_string_lossy(),
-        if worktree.is_primary { 1 } else { 0 }
     )
+    .bind(worktree.project_id)
+    .bind(&worktree.branch)
+    .bind(worktree.path.to_string_lossy().to_string())
+    .bind(if worktree.is_primary { 1 } else { 0 })
     .execute(pool)
     .await?
     .last_insert_rowid();
-    
+
     get_worktree(pool, id).await
 }
 
 pub async fn get_worktree(pool: &SqlitePool, id: i64) -> Result<Worktree> {
-    let row = sqlx::query!(
-        "SELECT * FROM worktrees WHERE id = ?1",
-        id
-    )
-    .fetch_one(pool)
-    .await?;
-    
-    Worktree::from_row(row.into()).await
+    let row = sqlx::query("SELECT * FROM worktrees WHERE id = ?1")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+
+    Worktree::from_row(&row)
 }
 
 pub async fn get_worktree_by_project_branch(
@@ -139,118 +137,99 @@ pub async fn get_worktree_by_project_branch(
     project_id: i64,
     branch: &str,
 ) -> Result<Option<Worktree>> {
-    let row = sqlx::query!(
-        "SELECT * FROM worktrees WHERE project_id = ?1 AND branch = ?2",
-        project_id,
-        branch
-    )
-    .fetch_optional(pool)
-    .await?;
-    
+    let row = sqlx::query("SELECT * FROM worktrees WHERE project_id = ?1 AND branch = ?2")
+        .bind(project_id)
+        .bind(branch)
+        .fetch_optional(pool)
+        .await?;
+
     match row {
-        Some(r) => Ok(Some(Worktree::from_row(r.into()).await?)),
+        Some(r) => Ok(Some(Worktree::from_row(&r)?)),
         None => Ok(None),
     }
 }
 
 pub async fn list_worktrees(pool: &SqlitePool, project_id: i64) -> Result<Vec<Worktree>> {
-    let rows = sqlx::query!(
-        "SELECT * FROM worktrees WHERE project_id = ?1 ORDER BY branch",
-        project_id
-    )
-    .fetch_all(pool)
-    .await?;
-    
+    let rows = sqlx::query("SELECT * FROM worktrees WHERE project_id = ?1 ORDER BY branch")
+        .bind(project_id)
+        .fetch_all(pool)
+        .await?;
+
     let mut worktrees = Vec::new();
     for row in rows {
-        worktrees.push(Worktree::from_row(row.into()).await?);
+        worktrees.push(Worktree::from_row(&row)?);
     }
     Ok(worktrees)
 }
 
 pub async fn touch_worktree(pool: &SqlitePool, id: i64) -> Result<()> {
-    sqlx::query!(
-        "UPDATE worktrees SET last_accessed_at = datetime('now') WHERE id = ?1",
-        id
-    )
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE worktrees SET last_accessed_at = datetime('now') WHERE id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 pub async fn create_session(pool: &SqlitePool, session: CreateSession) -> Result<Session> {
-    let id = sqlx::query!(
+    let id = sqlx::query(
         r#"
         INSERT INTO sessions (worktree_id, session_name, backend)
         VALUES (?1, ?2, ?3)
         "#,
-        session.worktree_id,
-        session.session_name,
-        session.backend
     )
+    .bind(session.worktree_id)
+    .bind(&session.session_name)
+    .bind(&session.backend)
     .execute(pool)
     .await?
     .last_insert_rowid();
-    
+
     get_session(pool, id).await
 }
 
 pub async fn get_session(pool: &SqlitePool, id: i64) -> Result<Session> {
-    let row = sqlx::query!(
-        "SELECT * FROM sessions WHERE id = ?1",
-        id
-    )
-    .fetch_one(pool)
-    .await?;
-    
-    Session::from_row(row.into()).await
+    let row = sqlx::query("SELECT * FROM sessions WHERE id = ?1")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+
+    Session::from_row(&row)
 }
 
-pub async fn get_session_for_worktree(
-    pool: &SqlitePool,
-    worktree_id: i64,
-) -> Result<Session> {
-    let row = sqlx::query!(
-        "SELECT * FROM sessions WHERE worktree_id = ?1",
-        worktree_id
-    )
-    .fetch_one(pool)
-    .await?;
-    
-    Session::from_row(row.into()).await
+pub async fn get_session_for_worktree(pool: &SqlitePool, worktree_id: i64) -> Result<Session> {
+    let row = sqlx::query("SELECT * FROM sessions WHERE worktree_id = ?1")
+        .bind(worktree_id)
+        .fetch_one(pool)
+        .await?;
+
+    Session::from_row(&row)
 }
 
 pub async fn get_session_by_name(pool: &SqlitePool, name: &str) -> Result<Option<Session>> {
-    let row = sqlx::query!(
-        "SELECT * FROM sessions WHERE session_name = ?1",
-        name
-    )
-    .fetch_optional(pool)
-    .await?;
-    
+    let row = sqlx::query("SELECT * FROM sessions WHERE session_name = ?1")
+        .bind(name)
+        .fetch_optional(pool)
+        .await?;
+
     match row {
-        Some(r) => Ok(Some(Session::from_row(r.into()).await?)),
+        Some(r) => Ok(Some(Session::from_row(&r)?)),
         None => Ok(None),
     }
 }
 
 pub async fn touch_session(pool: &SqlitePool, id: i64) -> Result<()> {
-    sqlx::query!(
-        "UPDATE sessions SET last_attached_at = datetime('now') WHERE id = ?1",
-        id
-    )
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE sessions SET last_attached_at = datetime('now') WHERE id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 pub async fn add_to_history(pool: &SqlitePool, session_id: i64) -> Result<()> {
-    sqlx::query!(
-        "INSERT INTO session_history (session_id) VALUES (?1)",
-        session_id
-    )
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT INTO session_history (session_id) VALUES (?1)")
+        .bind(session_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -259,8 +238,8 @@ pub async fn get_previous_session(
     current_session: Option<&str>,
 ) -> Result<Session> {
     // Get the most recent session from history, excluding current if provided
-    let query = if let Some(current) = current_session {
-        sqlx::query!(
+    let row = if let Some(current) = current_session {
+        sqlx::query(
             r#"
             SELECT s.* FROM sessions s
             INNER JOIN session_history h ON s.id = h.session_id
@@ -268,20 +247,22 @@ pub async fn get_previous_session(
             ORDER BY h.accessed_at DESC
             LIMIT 1
             "#,
-            current
         )
+        .bind(current)
+        .fetch_one(pool)
+        .await?
     } else {
-        sqlx::query!(
+        sqlx::query(
             r#"
             SELECT s.* FROM sessions s
             INNER JOIN session_history h ON s.id = h.session_id
             ORDER BY h.accessed_at DESC
             LIMIT 1
-            "#
+            "#,
         )
+        .fetch_one(pool)
+        .await?
     };
-    
-    let row = query.fetch_one(pool).await?;
-    Session::from_row(row.into()).await
-}
 
+    Session::from_row(&row)
+}

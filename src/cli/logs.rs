@@ -41,7 +41,7 @@ pub async fn run(args: LogsArgs) -> Result<()> {
     
     let file = fs::File::open(&log_file)?;
     let reader = BufReader::new(file);
-    let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+    let lines: Vec<String> = reader.lines().collect::<std::result::Result<_, _>>()?;
     
     let start = if lines.len() > args.lines {
         lines.len() - args.lines
