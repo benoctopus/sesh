@@ -1,0 +1,51 @@
+[package]
+name = "sesh"
+version = "0.1.0"
+edition = "2021"
+authors = ["sesh contributors"]
+description = "A session manager for git worktrees"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# CLI (4.5.x series is current stable)
+clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
+
+# Async runtime
+tokio = { version = "1.48", features = ["full"] }
+async-trait = "0.1"
+
+# Database (0.8.x is current stable; 0.9.x is alpha)
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
+
+# Git (0.20.x is current, requires libgit2 1.9.0)
+git2 = "0.20"
+
+# Config
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+dirs = "6"
+
+# Fuzzy finder (skim 0.20.x is Rust-native, latest stable)
+skim = "0.20"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging (file-based, keeps terminal clean)
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+
+# Terminal output
+owo-colors = "4"
+
+# Hashing for session names
+sha2 = "0.10"
+hex = "0.4"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3"
+
