@@ -1,14 +1,14 @@
-pub mod clone;
-pub mod switch;
-pub mod list;
-pub mod delete;
 pub mod clean;
+pub mod clone;
+pub mod delete;
+pub mod list;
+pub mod logs;
 pub mod pop;
 pub mod status;
-pub mod logs;
+pub mod switch;
 
-use clap::{Parser, Subcommand};
 use anyhow::Result;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "sesh")]
@@ -17,41 +17,45 @@ use anyhow::Result;
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
-    
+
     /// Enable verbose logging to terminal
     #[arg(long, global = true)]
     pub verbose: bool,
+
+    /// Override config directory (for testing)
+    #[arg(long, global = true)]
+    pub config_dir: Option<String>,
 }
 
 #[derive(Subcommand)]
 pub enum Commands {
     /// Clone a repository and create initial session
     Clone(clone::CloneArgs),
-    
+
     /// Switch to a branch (create worktree/session if needed)
     Switch(switch::SwitchArgs),
-    
+
     /// List projects, worktrees, or sessions
     List(list::ListArgs),
-    
+
     /// Delete a project, worktree, or session
     Delete(delete::DeleteArgs),
-    
+
     /// Clean up stale entries
     Clean(clean::CleanArgs),
-    
+
     /// Pop to previous session from history
     Pop,
-    
+
     /// Show current session status
     Status,
-    
+
     /// View or follow log files
     Logs(logs::LogsArgs),
-    
+
     /// Validate state and diagnose issues
     Doctor,
-    
+
     /// Generate shell completion script
     Completions {
         /// Shell to generate completions for
@@ -62,7 +66,12 @@ pub enum Commands {
 
 pub async fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    
+
+    // Set config dir override if provided
+    if let Some(config_dir) = &cli.config_dir {
+        std::env::set_var("SESH_CONFIG_DIR_OVERRIDE", config_dir);
+    }
+
     match cli.command {
         Commands::Clone(args) => clone::run(args).await.map_err(Into::into),
         Commands::Switch(args) => switch::run(args).await.map_err(Into::into),
@@ -76,22 +85,15 @@ pub async fn run() -> anyhow::Result<()> {
             eprintln!("Doctor command not yet implemented");
             Ok(())
         }
-        Commands::Completions { shell } => {
-            generate_completions(shell)
-        }
+        Commands::Completions { shell } => generate_completions(shell),
     }
 }
 
 /// Generate shell completions
 pub fn generate_completions(shell: clap_complete::Shell) -> Result<()> {
-    use std::io;
     use clap::CommandFactory;
+    use std::io;
     let mut cmd = Cli::command();
-    clap_complete::generate(
-        shell,
-        &mut cmd,
-        "sesh",
-        &mut io::stdout(),
-    );
+    clap_complete::generate(shell, &mut cmd, "sesh", &mut io::stdout());
     Ok(())
 }

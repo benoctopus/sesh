@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 pub fn load() -> Result<Config> {
     let config_path = config_path()?;
-    
+
     if config_path.exists() {
         let content = std::fs::read_to_string(&config_path)
             .with_context(|| format!("Failed to read config from {}", config_path.display()))?;
@@ -20,18 +20,27 @@ pub fn load() -> Result<Config> {
 }
 
 pub fn config_path() -> Result<PathBuf> {
-    Ok(dirs::config_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?
-        .join("sesh")
-        .join("config.toml"))
+    Ok(config_dir()?.join("config.toml"))
 }
 
 pub fn ensure_config_dir() -> Result<PathBuf> {
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?
-        .join("sesh");
-    std::fs::create_dir_all(&config_dir)
-        .with_context(|| format!("Failed to create config directory: {}", config_dir.display()))?;
+    let config_dir = config_dir()?;
+    std::fs::create_dir_all(&config_dir).with_context(|| {
+        format!(
+            "Failed to create config directory: {}",
+            config_dir.display()
+        )
+    })?;
     Ok(config_dir)
 }
 
+fn config_dir() -> Result<PathBuf> {
+    // Check for override from environment (set by --config-dir flag)
+    if let Ok(override_dir) = std::env::var("SESH_CONFIG_DIR_OVERRIDE") {
+        return Ok(PathBuf::from(override_dir));
+    }
+
+    Ok(dirs::config_dir()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?
+        .join("sesh"))
+}
