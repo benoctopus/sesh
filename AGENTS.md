@@ -19,4 +19,5 @@ This document provides guidance for AI coding assistants working with the `sesh`
 4. internal readmes must be concise and to the point, and link to other related documentation when relevant.
 5. When modifying existing code that relates to any existing documentation, ensure that the documentation is updated accordingly.
 5. Follow Rust's idiomatic practices and conventions.
+6. You must ensure that any changed code is buildable and passes tests before finalizing changes.
 
