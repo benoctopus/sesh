@@ -1,5 +1,5 @@
 use super::models::*;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use sqlx::sqlite::SqlitePool;
 use std::path::PathBuf;
 

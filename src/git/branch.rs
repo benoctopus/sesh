@@ -1,6 +1,5 @@
 use crate::error::{Error, Result};
 use git2::{BranchType, Repository};
-use tracing::debug;
 
 /// Check if a branch exists locally
 pub fn branch_exists_local(repo: &Repository, branch: &str) -> Result<bool> {
@@ -25,7 +24,7 @@ pub fn get_upstream(repo: &Repository, branch: &str) -> Result<String> {
 
     upstream
         .name()
-        .map_err(|e| Error::GitError {
+        .map_err(|_| Error::GitError {
             message: "Upstream branch name is invalid UTF-8".to_string(),
         })?
         .ok_or_else(|| Error::GitError {

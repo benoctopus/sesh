@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use git2::{Repository, FetchOptions};
+use git2::Repository;
 use std::path::Path;
 use tracing::{debug, info};
 
