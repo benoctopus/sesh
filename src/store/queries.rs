@@ -1,5 +1,5 @@
 use super::models::*;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use sqlx::sqlite::SqlitePool;
 use std::path::PathBuf;
 
@@ -83,6 +83,39 @@ pub async fn get_project_by_name(pool: &SqlitePool, name: &str) -> Result<Projec
         .await?;
 
     Project::from_row(&row)
+}
+
+/// Find project by name with flexible matching (exact name, display_name, or partial match)
+pub async fn find_project_by_name(pool: &SqlitePool, search: &str) -> Result<Project> {
+    // Try exact match on name first
+    if let Ok(project) = get_project_by_name(pool, search).await {
+        return Ok(project);
+    }
+    
+    // Try exact match on display_name or partial match on name (ends with search term)
+    let rows = sqlx::query(
+        "SELECT * FROM projects WHERE display_name = ?1 OR name LIKE ?2"
+    )
+    .bind(search)
+    .bind(format!("%/{}", search))
+    .fetch_all(pool)
+    .await?;
+    
+    match rows.len() {
+        0 => Err(Error::ProjectNotFound { name: search.to_string() }),
+        1 => Project::from_row(&rows[0]),
+        _ => {
+            // Multiple matches - collect project names
+            let matches: Vec<String> = rows.iter()
+                .filter_map(|r| Project::from_row(r).ok())
+                .map(|p| p.name)
+                .collect();
+            Err(Error::AmbiguousProjectName { 
+                name: search.to_string(),
+                matches,
+            })
+        }
+    }
 }
 
 pub async fn list_projects(pool: &SqlitePool) -> Result<Vec<Project>> {

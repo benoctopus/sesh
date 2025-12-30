@@ -19,19 +19,29 @@ impl ProjectManager {
     
     /// Parse project name from URL
     fn parse_project_name(url: &str) -> Result<String> {
-        // Extract host/user/repo from URL
         let url = url.trim_end_matches(".git");
-        let parts: Vec<&str> = url.split('/').collect();
         
-        if parts.len() < 3 {
-            return Err(Error::InvalidUrl {
-                url: url.to_string(),
-            });
+        // Handle SSH URLs: git@github.com:user/repo
+        if url.contains('@') && url.contains(':') && !url.contains("://") {
+            // SSH format: git@host:user/repo
+            let parts: Vec<&str> = url.splitn(2, ':').collect();
+            if parts.len() == 2 {
+                let host = parts[0].split('@').last().unwrap_or(parts[0]);
+                return Ok(format!("{}/{}", host, parts[1]));
+            }
         }
         
-        // Get last 3 parts (host, user, repo)
-        let name = parts[parts.len() - 3..].join("/");
-        Ok(name)
+        // Handle HTTPS URLs: https://github.com/user/repo
+        let parts: Vec<&str> = url.split('/').collect();
+        if parts.len() >= 3 {
+            // Get last 3 parts (host, user, repo)
+            let name = parts[parts.len() - 3..].join("/");
+            return Ok(name);
+        }
+        
+        Err(Error::InvalidUrl {
+            url: url.to_string(),
+        })
     }
     
     /// Extract repo name from project name

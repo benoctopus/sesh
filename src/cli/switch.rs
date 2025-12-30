@@ -31,7 +31,7 @@ pub async fn run(args: SwitchArgs) -> Result<()> {
     
     // Determine project
     let project = if let Some(project_name) = args.project {
-        project_manager.get_by_name(&project_name).await?
+        crate::store::queries::find_project_by_name(store.pool(), &project_name).await?
     } else {
         // List projects and let user pick
         let projects = project_manager.list().await?;

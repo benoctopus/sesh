@@ -8,6 +8,9 @@ pub enum Error {
     #[error("Project not found: {name}. List available projects with: sesh list --projects")]
     ProjectNotFound { name: String },
     
+    #[error("Ambiguous project name '{name}'. Matches: {}", matches.join(", "))]
+    AmbiguousProjectName { name: String, matches: Vec<String> },
+    
     #[error("Worktree path no longer exists: {path}. Remove the stale entry with: sesh clean --stale")]
     WorktreeStale { path: PathBuf },
     
