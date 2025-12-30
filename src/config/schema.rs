@@ -5,10 +5,10 @@ use std::path::PathBuf;
 pub struct Config {
     #[serde(default = "default_workspace")]
     pub workspace: WorkspaceConfig,
-    
+
     #[serde(default = "default_session")]
     pub session: SessionConfig,
-    
+
     #[serde(default = "default_picker")]
     pub picker: PickerConfig,
 }
@@ -28,7 +28,7 @@ pub struct WorkspaceConfig {
     /// Base directory for cloned projects
     #[serde(default = "default_projects_dir")]
     pub projects_dir: String,
-    
+
     /// Base directory for worktrees
     #[serde(default = "default_worktrees_dir")]
     pub worktrees_dir: String,
@@ -54,7 +54,7 @@ pub struct SessionConfig {
     /// Backend: "tmux", "code", "cursor"
     #[serde(default = "default_backend")]
     pub backend: String,
-    
+
     /// Startup command to run in new sessions
     #[serde(default)]
     pub startup_command: Option<String>,
@@ -93,11 +93,11 @@ impl Config {
     pub fn projects_dir(&self) -> PathBuf {
         expand_tilde(&self.workspace.projects_dir)
     }
-    
+
     pub fn worktrees_dir(&self) -> PathBuf {
         expand_tilde(&self.workspace.worktrees_dir)
     }
-    
+
     /// Validate configuration values
     pub fn validate(&self) -> anyhow::Result<()> {
         // Validate session backend
@@ -112,7 +112,7 @@ impl Config {
             "cursor:workspace",
             "cursor:replace",
         ];
-        
+
         if !valid_backends.contains(&self.session.backend.as_str()) {
             anyhow::bail!(
                 "Invalid session backend '{}'. Must be one of: {}",
@@ -120,7 +120,7 @@ impl Config {
                 valid_backends.join(", ")
             );
         }
-        
+
         // Validate picker finder
         let valid_finders = ["auto", "fzf", "skim"];
         if !valid_finders.contains(&self.picker.finder.as_str()) {
@@ -130,12 +130,12 @@ impl Config {
                 valid_finders.join(", ")
             );
         }
-        
+
         // Validate that paths are expandable (tilde expansion)
         // We don't check if directories exist, just that they can be expanded
         let _ = self.projects_dir();
         let _ = self.worktrees_dir();
-        
+
         Ok(())
     }
 }
@@ -148,4 +148,3 @@ fn expand_tilde(path: &str) -> PathBuf {
     }
     PathBuf::from(path)
 }
-

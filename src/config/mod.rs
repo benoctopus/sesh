@@ -49,24 +49,23 @@ fn config_dir() -> Result<PathBuf> {
 pub fn save(config: &Config) -> Result<()> {
     let config_path = config_path()?;
     ensure_config_dir()?;
-    
-    let content = toml::to_string_pretty(config)
-        .context("Failed to serialize config to TOML")?;
-    
+
+    let content = toml::to_string_pretty(config).context("Failed to serialize config to TOML")?;
+
     std::fs::write(&config_path, content)
         .with_context(|| format!("Failed to write config to {}", config_path.display()))?;
-    
+
     Ok(())
 }
 
 /// Create config file with default values if it doesn't exist
 pub fn save_default() -> Result<()> {
     let config_path = config_path()?;
-    
+
     if !config_path.exists() {
         let default_config = Config::default();
         save(&default_config)?;
     }
-    
+
     Ok(())
 }
