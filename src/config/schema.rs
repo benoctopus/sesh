@@ -97,6 +97,47 @@ impl Config {
     pub fn worktrees_dir(&self) -> PathBuf {
         expand_tilde(&self.workspace.worktrees_dir)
     }
+    
+    /// Validate configuration values
+    pub fn validate(&self) -> anyhow::Result<()> {
+        // Validate session backend
+        let valid_backends = [
+            "tmux",
+            "code",
+            "code:open",
+            "code:workspace",
+            "code:replace",
+            "cursor",
+            "cursor:open",
+            "cursor:workspace",
+            "cursor:replace",
+        ];
+        
+        if !valid_backends.contains(&self.session.backend.as_str()) {
+            anyhow::bail!(
+                "Invalid session backend '{}'. Must be one of: {}",
+                self.session.backend,
+                valid_backends.join(", ")
+            );
+        }
+        
+        // Validate picker finder
+        let valid_finders = ["auto", "fzf", "skim"];
+        if !valid_finders.contains(&self.picker.finder.as_str()) {
+            anyhow::bail!(
+                "Invalid fuzzy finder '{}'. Must be one of: {}",
+                self.picker.finder,
+                valid_finders.join(", ")
+            );
+        }
+        
+        // Validate that paths are expandable (tilde expansion)
+        // We don't check if directories exist, just that they can be expanded
+        let _ = self.projects_dir();
+        let _ = self.worktrees_dir();
+        
+        Ok(())
+    }
 }
 
 fn expand_tilde(path: &str) -> PathBuf {

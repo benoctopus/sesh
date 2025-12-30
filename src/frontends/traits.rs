@@ -33,12 +33,12 @@ pub trait Picker: Send + Sync {
 
 /// Detect and create the best available picker
 pub fn detect_picker() -> Result<Box<dyn Picker>> {
-    // Try skim first (Rust-native), then fzf
-    if crate::frontends::skim::SkimPicker::new().is_available() {
-        return Ok(Box::new(crate::frontends::skim::SkimPicker::new()));
-    }
+    // Try fzf first (external process, more battle-tested), then skim (library)
     if crate::frontends::fzf::FzfPicker::new().is_available() {
         return Ok(Box::new(crate::frontends::fzf::FzfPicker::new()));
+    }
+    if crate::frontends::skim::SkimPicker::new().is_available() {
+        return Ok(Box::new(crate::frontends::skim::SkimPicker::new()));
     }
     Err(crate::error::Error::NoPickerAvailable)
 }

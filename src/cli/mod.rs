@@ -1,6 +1,7 @@
 pub mod clean;
 pub mod clone;
 pub mod delete;
+pub mod edit;
 pub mod list;
 pub mod logs;
 pub mod pop;
@@ -58,6 +59,9 @@ pub enum Commands {
     /// View or follow log files
     Logs(logs::LogsArgs),
 
+    /// Edit the sesh configuration file
+    Edit,
+
     /// Validate state and diagnose issues
     Doctor,
 
@@ -86,6 +90,7 @@ pub async fn run() -> anyhow::Result<()> {
         Commands::Pop => pop::run().await.map_err(Into::into),
         Commands::Status => status::run().await.map_err(Into::into),
         Commands::Logs(args) => logs::run(args).await.map_err(Into::into),
+        Commands::Edit => edit::run().await.map_err(Into::into),
         Commands::Doctor => {
             eprintln!("Doctor command not yet implemented");
             Ok(())
