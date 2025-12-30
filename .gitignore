@@ -18,6 +18,8 @@ node_modules/
 /nix
 /sesh
 
+target/
+
 # Test coverage
 coverage.out
 coverage.html
