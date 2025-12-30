@@ -30,21 +30,26 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Clone a repository and create initial session
+    #[command(visible_alias = "cl")]
     Clone(clone::CloneArgs),
 
     /// Switch to a branch (create worktree/session if needed)
+    #[command(visible_alias = "sw")]
     Switch(switch::SwitchArgs),
 
     /// List projects, worktrees, or sessions
+    #[command(visible_aliases = ["ls"])]
     List(list::ListArgs),
 
     /// Delete a project, worktree, or session
+    #[command(visible_aliases = ["del", "remove", "rm"])]
     Delete(delete::DeleteArgs),
 
     /// Clean up stale entries
     Clean(clean::CleanArgs),
 
     /// Pop to previous session from history
+    #[command(visible_aliases = ["p", "back", "last"])]
     Pop,
 
     /// Show current session status

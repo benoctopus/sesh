@@ -3,6 +3,7 @@ use crate::error::Result;
 use crate::config;
 use crate::store::Store;
 use crate::managers::ProjectManager;
+use std::io::{self, Write};
 use tracing::info;
 
 #[derive(Args)]
@@ -14,6 +15,41 @@ pub struct CleanArgs {
     /// Remove orphaned sessions
     #[arg(long)]
     pub orphaned: bool,
+    
+    /// Project name to clean
+    #[arg(short = 'p', long)]
+    pub project: Option<String>,
+    
+    /// Skip confirmation prompts
+    #[arg(short = 'f', long)]
+    pub force: bool,
+    
+    /// Delete local worktrees for branches that have been deleted on the remote
+    #[arg(long)]
+    pub remote_deleted: bool,
+}
+
+fn confirm_cleanup(message: &str, force: bool) -> Result<bool> {
+    if force {
+        return Ok(true);
+    }
+    
+    // Check if we're in an interactive terminal
+    let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdin());
+    if !is_tty {
+        return Err(crate::error::Error::GitError {
+            message: "--force flag required for cleanup in noninteractive mode".to_string(),
+        });
+    }
+    
+    print!("{}", message);
+    io::stdout().flush()?;
+    
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    
+    let response = input.trim().to_lowercase();
+    Ok(response == "yes" || response == "y")
 }
 
 pub async fn run(args: CleanArgs) -> Result<()> {
@@ -24,14 +60,28 @@ pub async fn run(args: CleanArgs) -> Result<()> {
     
     if args.stale {
         let projects = project_manager.list_validated().await?;
-        let mut removed = 0;
+        let stale_projects: Vec<_> = projects
+            .iter()
+            .filter(|(_, status)| matches!(status, crate::managers::project::EntityStatus::Stale))
+            .collect();
         
-        for (project, status) in projects {
-            if matches!(status, crate::managers::project::EntityStatus::Stale) {
-                info!(project = %project.name, "Removing stale project");
-                let _ = project_manager.delete(project.id).await;
-                removed += 1;
+        if !stale_projects.is_empty() {
+            let message = format!(
+                "Found {} stale project(s). Delete these projects? (yes/no): ",
+                stale_projects.len()
+            );
+            
+            if !confirm_cleanup(&message, args.force)? {
+                println!("Cleanup cancelled.");
+                return Ok(());
             }
+        }
+        
+        let mut removed = 0;
+        for (project, _) in stale_projects {
+            info!(project = %project.name, "Removing stale project");
+            let _ = project_manager.delete(project.id).await;
+            removed += 1;
         }
         
         println!("Removed {} stale entries", removed);
@@ -49,6 +99,18 @@ pub async fn run(args: CleanArgs) -> Result<()> {
         .fetch_all(store.pool())
         .await?;
         
+        if !rows.is_empty() {
+            let message = format!(
+                "Found {} orphaned session(s). Delete these sessions? (yes/no): ",
+                rows.len()
+            );
+            
+            if !confirm_cleanup(&message, args.force)? {
+                println!("Cleanup cancelled.");
+                return Ok(());
+            }
+        }
+        
         let mut count = 0;
         use sqlx::Row;
         for row in rows {
@@ -63,8 +125,13 @@ pub async fn run(args: CleanArgs) -> Result<()> {
         println!("Removed {} orphaned sessions", count);
     }
     
-    if !args.stale && !args.orphaned {
-        eprintln!("Must specify --stale or --orphaned");
+    if args.remote_deleted {
+        // TODO: Implement remote-deleted branch cleanup
+        eprintln!("--remote-deleted flag is not yet implemented");
+    }
+    
+    if !args.stale && !args.orphaned && !args.remote_deleted {
+        eprintln!("Must specify --stale, --orphaned, or --remote-deleted");
     }
     
     Ok(())

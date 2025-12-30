@@ -17,6 +17,30 @@ pub struct ListArgs {
     /// List sessions
     #[arg(long)]
     pub sessions: bool,
+    
+    /// Show open pull requests
+    #[arg(long)]
+    pub pr: bool,
+    
+    /// Output in JSON format
+    #[arg(long)]
+    pub json: bool,
+    
+    /// Output session names only (for piping)
+    #[arg(long)]
+    pub plain: bool,
+    
+    /// Filter to sessions for current project
+    #[arg(long)]
+    pub current_project: bool,
+    
+    /// Show only running sessions
+    #[arg(long)]
+    pub running: bool,
+    
+    /// Show all sessions (running and stopped)
+    #[arg(long)]
+    pub all: bool,
 }
 
 pub async fn run(args: ListArgs) -> Result<()> {

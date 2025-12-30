@@ -18,6 +18,12 @@ impl SessionManager {
     /// Create or attach to a session for a worktree
     #[instrument(skip(self), fields(worktree_id))]
     pub async fn switch_to(&self, worktree_id: i64) -> Result<()> {
+        self.switch_to_with_detach(worktree_id, false).await
+    }
+    
+    /// Create or attach to a session for a worktree, with optional detach flag
+    #[instrument(skip(self), fields(worktree_id, detach))]
+    pub async fn switch_to_with_detach(&self, worktree_id: i64, detach: bool) -> Result<()> {
         let worktree = crate::store::queries::get_worktree(self.store.pool(), worktree_id).await?;
         
         // Validate worktree path first
@@ -56,6 +62,12 @@ impl SessionManager {
         // Update last_accessed_at
         crate::store::queries::touch_worktree(self.store.pool(), worktree_id).await?;
         crate::store::queries::touch_session(self.store.pool(), session.id).await?;
+        
+        // If detach is true, skip attaching
+        if detach {
+            info!(session = %session.session_name, "Session created (detached)");
+            return Ok(());
+        }
         
         // Attach or switch depending on context
         if self.backend.is_inside_session() {
