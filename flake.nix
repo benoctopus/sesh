@@ -18,14 +18,26 @@
         pkgsLinux = nixpkgs.legacyPackages.${linuxSystem};
       in
       {
-        packages.default = pkgs.buildGoModule {
+        packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "sesh";
-          version = "0.1.11";
+          version = "0.1.0";
 
           src = ./.;
 
-          vendorHash = "sha256-XtKA7DrjUeAZDPMFa6Z6dkDLwsAz8N/91yRJoi9yewA=";
-          nativeBuildInputs = [ pkgs.makeWrapper ];
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+          };
+
+          nativeBuildInputs = [
+            pkgs.pkg-config
+            pkgs.makeWrapper
+          ];
+
+          buildInputs = [
+            pkgs.openssl
+            pkgs.libgit2
+            pkgs.sqlite
+          ];
 
           postInstall = ''
             wrapProgram $out/bin/sesh \
@@ -33,11 +45,11 @@
                 pkgs.lib.makeBinPath [
                   pkgs.git
                   pkgs.fzf
-                  pkgs.screen
+                  pkgs.tmux
                 ]
               }
           '';
-          checkPhase = "";
+
           meta = with pkgs.lib; {
             description = "A modern git workspace and session manager that integrates git worktrees with terminal multiplexers (tmux, zellij)";
             homepage = "https://github.com/benoctopus/sesh";
@@ -50,24 +62,36 @@
 
         devShells.default = pkgs.mkShell {
           packages = [
+            # Rust toolchain
+            pkgs.rustc
+            pkgs.cargo
+            pkgs.clippy
+            pkgs.rustfmt
+            pkgs.rust-analyzer
+
+            # Build dependencies
+            pkgs.pkg-config
+            pkgs.openssl
+            pkgs.libgit2
+            pkgs.sqlite
+
+            # Testing tools
             pkgs.git
-            pkgs.go_1_24
-            pkgs.ranger
-            pkgs.go-task
-            pkgs.gopls
-            pkgs.golines
-            pkgs.golangci-lint
-            pkgs.jq
-            pkgs.yq
-            pkgs.gofumpt
-            pkgs.uutils-coreutils-noprefix
-            pkgs.shellcheck
-            pkgs.cobra-cli
-            pkgs.tree
             pkgs.fzf
             pkgs.tmux
             pkgs.zellij
+
+            # Development utilities
+            pkgs.jq
+            pkgs.yq
+            pkgs.tree
+            pkgs.shellcheck
+            pkgs.go-task
           ];
+
+          # Set environment variables for build dependencies
+          LIBGIT2_SYS_USE_PKG_CONFIG = "1";
+          PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig:${pkgs.libgit2}/lib/pkgconfig:${pkgs.sqlite.dev}/lib/pkgconfig";
         };
       }
     );

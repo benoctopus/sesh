@@ -32,6 +32,14 @@ pub struct SwitchArgs {
     /// Create session without attaching to it
     #[arg(short = 'd', long)]
     pub detach: bool,
+
+    /// Show local git branches (not just existing worktrees)
+    #[arg(long)]
+    pub local: bool,
+
+    /// Show all branches including remote (current behavior)
+    #[arg(long)]
+    pub remote: bool,
 }
 
 pub async fn run(args: SwitchArgs) -> Result<()> {
@@ -78,14 +86,28 @@ pub async fn run(args: SwitchArgs) -> Result<()> {
     let branch = if let Some(branch) = args.branch {
         branch
     } else {
-        // List branches and let user pick
-        let repo = git::open(&project.clone_path)?;
-        let branches = git::list_all_branches(&repo)?;
+        // Determine which branches to show based on flags
+        let branches = if args.remote {
+            // Show all branches (local + remote)
+            let repo = git::open(&project.clone_path)?;
+            git::list_all_branches(&repo)?
+        } else if args.local {
+            // Show only local git branches
+            let repo = git::open(&project.clone_path)?;
+            git::list_local_branches(&repo)?
+        } else {
+            // Default: show only existing worktrees
+            let worktrees = worktree_manager.list(project.id).await?;
+            worktrees.into_iter().map(|w| w.branch).collect()
+        };
 
         if branches.is_empty() {
-            return Err(crate::error::Error::GitError {
-                message: "No branches found".to_string(),
-            });
+            let message = if args.remote || args.local {
+                "No branches found".to_string()
+            } else {
+                "No worktrees found for this project. Use --local to see local branches or --remote to see all branches.".to_string()
+            };
+            return Err(crate::error::Error::GitError { message });
         }
 
         let picker = detect_picker()?;

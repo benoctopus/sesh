@@ -2,18 +2,15 @@ version: "3"
 
 vars:
   BINARY_NAME: sesh
-  DIST_DIR: dist
-  MAIN_PACKAGE: .
-  GO_FILES:
-    sh: find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./.direnv/*"
+  TARGET_DIR: target
+  RELEASE_DIR: "{{.TARGET_DIR}}/release"
+  DEBUG_DIR: "{{.TARGET_DIR}}/debug"
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
   COMMIT:
     sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
   BUILD_DATE:
     sh: date -u '+%Y-%m-%d_%H:%M:%S'
-  BUILT_BY:
-    sh: whoami
 
 tasks:
   default:
@@ -23,147 +20,124 @@ tasks:
     silent: true
 
   build:
-    desc: Build the binary
+    desc: Build the binary in release mode
     sources:
-      - "**/*.go"
-      - "go.mod"
-      - "go.sum"
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
     generates:
-      - "{{.DIST_DIR}}/{{.BINARY_NAME}}"
+      - "{{.RELEASE_DIR}}/{{.BINARY_NAME}}"
     cmds:
-      - mkdir -p {{.DIST_DIR}}
-      - >
-        go build
-        -ldflags "
-        -X github.com/benoctopus/sesh/cmd.version={{.VERSION}}
-        -X github.com/benoctopus/sesh/cmd.commit={{.COMMIT}}
-        -X github.com/benoctopus/sesh/cmd.buildDate={{.BUILD_DATE}}
-        -X github.com/benoctopus/sesh/cmd.builtBy={{.BUILT_BY}}
-        "
-        -o {{.DIST_DIR}}/{{.BINARY_NAME}}
-        {{.MAIN_PACKAGE}}
+      - cargo build --release
 
   build:debug:
-    desc: Build the binary with debug symbols
+    desc: Build the binary in debug mode
+    sources:
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+    generates:
+      - "{{.DEBUG_DIR}}/{{.BINARY_NAME}}"
     cmds:
-      - mkdir -p {{.DIST_DIR}}
-      - >
-        go build
-        -gcflags="all=-N -l"
-        -ldflags "
-        -X github.com/benoctopus/sesh/cmd.version={{.VERSION}}
-        -X github.com/benoctopus/sesh/cmd.commit={{.COMMIT}}
-        -X github.com/benoctopus/sesh/cmd.buildDate={{.BUILD_DATE}}
-        -X github.com/benoctopus/sesh/cmd.builtBy={{.BUILT_BY}}
-        "
-        -o {{.DIST_DIR}}/{{.BINARY_NAME}}
-        {{.MAIN_PACKAGE}}
+      - cargo build
 
   install:
-    desc: Install the binary to $GOPATH/bin
+    desc: Install the binary to $CARGO_HOME/bin or ~/.cargo/bin
     deps: [build]
     cmds:
-      - go install {{.MAIN_PACKAGE}}
+      - cargo install --path .
 
   run:
     desc: "Run the application (usage: task run -- [args])"
     cmds:
-      - go run {{.MAIN_PACKAGE}} {{.CLI_ARGS}}
+      - cargo run -- {{.CLI_ARGS}}
 
   dev:
     desc: Run in development mode (rebuild on changes)
     cmds:
-      - |
-        while true; do
-          task build
-          echo "Watching for changes... (Ctrl+C to stop)"
-          inotifywait -qre close_write . --include '\.go$' || fswatch -1 -r --include='\.go$' . || sleep 2
-        done
+      - cargo watch -x run
 
   test:
     desc: Run tests
     cmds:
-      - go test -v -race -coverprofile=coverage.out ./...
+      - cargo test --verbose
 
   test:coverage:
-    desc: Run tests and show coverage
+    desc: Run tests and generate coverage report
     cmds:
-      - task: test
-      - go tool cover -html=coverage.out -o coverage.html
-      - echo "Coverage report generated at coverage.html"
+      - cargo tarpaulin --out Html --output-dir coverage
+      - echo "Coverage report generated at coverage/index.html"
 
   test:short:
-    desc: Run tests (short mode)
+    desc: Run tests without output capture
     cmds:
-      - go test -short ./...
+      - cargo test -- --nocapture
 
   bench:
     desc: Run benchmarks
     cmds:
-      - go test -bench=. -benchmem ./...
+      - cargo bench
 
   fmt:
     desc: Format code
     cmds:
-      - go tool gofumpt -l -w .
-      - go tool golines -w --max-len=120 --base-formatter=gofumpt .
+      - cargo fmt
 
   fmt:check:
     desc: Check if code is formatted
     cmds:
-      - gofumpt -l .
-      - test -z "$(gofumpt -l .)"
+      - cargo fmt -- --check
 
-  tidy:
-    desc: Tidy go.mod
+  clippy:
+    desc: Run clippy linter
     cmds:
-      - go mod tidy
-
-  verify:
-    desc: Verify dependencies
-    cmds:
-      - go mod verify
+      - cargo clippy -- -D warnings
 
   check:
-    desc: Run all checks (fmt, lint, test)
+    desc: Run all checks (fmt, clippy, test)
     cmds:
       - task: fmt:check
+      - task: clippy
       - task: test
 
   clean:
     desc: Clean build artifacts
     cmds:
-      - rm -rf {{.DIST_DIR}}
-      - rm -f coverage.out coverage.html
-      - go clean -cache -testcache
+      - cargo clean
+      - rm -rf coverage/
 
   clean:all:
     desc: Clean all generated files including dependencies
     cmds:
       - task: clean
-      - rm -rf vendor/
-      - go clean -modcache
+      - rm -rf ~/.cargo/registry/cache/
+      - rm -rf ~/.cargo/git/db/
 
   deps:
-    desc: Download dependencies
+    desc: Update dependencies
     cmds:
-      - go mod download
+      - cargo update
 
-  cobra:add:
-    desc: "Add a new cobra command (usage: task cobra:add -- commandName)"
+  deps:check:
+    desc: Check for outdated dependencies
     cmds:
-      - cobra-cli add {{.CLI_ARGS}}
+      - cargo outdated
 
-  init:db:
-    desc: Initialize the database (placeholder for future implementation)
+  doc:
+    desc: Build documentation
     cmds:
-      - echo "Database initialization not yet implemented"
+      - cargo doc --no-deps
+
+  doc:open:
+    desc: Build and open documentation in browser
+    cmds:
+      - cargo doc --no-deps --open
 
   help:
     desc: Show help for the built binary
     deps: [build]
     cmds:
-      - "{{.DIST_DIR}}/{{.BINARY_NAME}} --help"
+      - "{{.RELEASE_DIR}}/{{.BINARY_NAME}} --help"
 
   release:
     desc: "Create a new release (usage: task release -- --type [patch|minor|major])"
